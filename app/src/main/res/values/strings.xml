@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">心率记录</string>
+    <string name="notification_channel_name">心率监测</string>
+    <string name="notification_channel_description">后台持续记录心率时显示的通知</string>
+    <string name="notification_title">心率监测中</string>
+    <string name="notification_tap">点击返回应用</string>
+    <string name="bpm">bpm</string>
+</resources>

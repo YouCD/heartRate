@@ -1,0 +1,56 @@
+# Built application files
+*.apk
+*.aar
+*.ap_
+*.aab
+
+# Files for the ART/Dalvik VM
+*.dex
+
+# Java class files
+*.class
+
+# Generated files
+gen/
+out/
+release/
+
+# Gradle files
+.gradle/
+build/
+
+# Local configuration file (sdk path, etc)
+local.properties
+
+# Proguard folder
+proguard/
+
+# Log Files
+*.log
+
+# Android Studio / IntelliJ
+*.iml
+.idea/
+*.ipr
+*.iws
+captures/
+
+# Keystore files
+*.jks
+*.keystore
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# NDK build output
+.cxx/
+krond_injector.zip
+
+# 随模块分发的 App 安装包（由 CI/打包脚本生成）
+KrondInjector.apk
+
+# krond Go 编译产物（本地测试时生成，CI 中编译）
+krond_injector/krond
+.kotlin
+krond/krond

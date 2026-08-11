@@ -22,12 +22,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -73,7 +71,6 @@ import online.youcd.heartrate.ui.components.XAxisMode
 @Composable
 fun SessionDetailScreen(
     onBack: () -> Unit,
-    onGoHome: () -> Unit,
     viewModel: SessionDetailViewModel = hiltViewModel()
 ) {
     val session by viewModel.session.collectAsState()
@@ -82,8 +79,10 @@ fun SessionDetailScreen(
     val scope = rememberCoroutineScope()
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var xAxisMode by remember { mutableStateOf(XAxisMode.TRAINING_TIME) }
+    var showMoreMenu by remember { mutableStateOf(false) }
     val shareLayer = rememberGraphicsLayer()
     val shareBg = MaterialTheme.colorScheme.surface
+    var captureRequested by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier.fillMaxSize()
@@ -110,12 +109,38 @@ fun SessionDetailScreen(
                 }
             }
             session?.let { s ->
-                IconButton(onClick = {
-                    scope.launch {
-                        shareSessionScreenshot(context, shareLayer)
+                Box {
+                    IconButton(onClick = { showMoreMenu = true }) {
+                        Icon(
+                            Icons.Filled.MoreVert,
+                            contentDescription = "更多",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
                     }
-                }) {
-                    Icon(Icons.Filled.Share, contentDescription = "分享")
+                    DropdownMenu(
+                        expanded = showMoreMenu,
+                        onDismissRequest = { showMoreMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("分享训练回顾") },
+                            onClick = {
+                                showMoreMenu = false
+                                scope.launch {
+                                    captureRequested = true
+                                    androidx.compose.runtime.withFrameNanos { }
+                                    shareSessionScreenshot(context, shareLayer)
+                                    captureRequested = false
+                                }
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("删除记录", color = MaterialTheme.colorScheme.error) },
+                            onClick = {
+                                showMoreMenu = false
+                                showDeleteConfirm = true
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -129,6 +154,11 @@ fun SessionDetailScreen(
             }
             return@Column
         }
+        val summaryText = remember(s) { buildSummary(s) }
+        val zoneMap = remember(s) { parseZoneSeconds(s.zoneSeconds) }
+        val mainZoneText = remember(zoneMap) {
+            zoneMap.maxByOrNull { it.value }?.let { zoneLabelFromName(it.key) }
+        }
 
         Column(
             modifier = Modifier
@@ -137,9 +167,11 @@ fun SessionDetailScreen(
                 .padding(horizontal = 16.dp)
                 .drawWithContent {
                     val contentScope = this
-                    shareLayer.record {
-                        drawRect(color = shareBg)
-                        contentScope.drawContent()
+                    if (captureRequested) {
+                        shareLayer.record {
+                            drawRect(color = shareBg)
+                            contentScope.drawContent()
+                        }
                     }
                     contentScope.drawContent()
                 }
@@ -227,11 +259,13 @@ fun SessionDetailScreen(
             ) {
                 if (heartRates.size >= 2) {
                     val maxHr = if (s.maxHr > 0) s.maxHr else (s.maxBpm * 1.2).toInt()
+                    val chartSamples = remember(heartRates) { heartRates.map { it.bpm } }
+                    val chartTimes = remember(heartRates) { heartRates.map { it.timestamp } }
                     HeartRateChart(
-                        samples = heartRates.map { it.bpm },
+                        samples = chartSamples,
                         maxHr = maxHr,
                         lineColor = Color(s.maxBpmColor(s.maxHr)),
-                        timestamps = heartRates.map { it.timestamp },
+                        timestamps = chartTimes,
                         xAxisMode = xAxisMode,
                         modifier = Modifier
                             .fillMaxSize()
@@ -274,7 +308,7 @@ fun SessionDetailScreen(
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            text = buildSummary(s),
+                            text = summaryText,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurface
                         )
@@ -296,7 +330,6 @@ fun SessionDetailScreen(
                 color = MaterialTheme.colorScheme.surfaceVariant,
                 shape = RoundedCornerShape(20.dp)
             ) {
-                val zoneMap = parseZoneSeconds(s.zoneSeconds)
                 val totalSeconds = zoneMap.values.sum()
                 val mainZone = zoneMap.maxByOrNull { it.value }
                 Column(
@@ -309,7 +342,7 @@ fun SessionDetailScreen(
                         zoneSeconds = HeartRateZone.ZONES.map {
                             zoneMap[it.displayName] ?: 0
                         },
-                        centerLabel = mainZone?.let { zoneLabelFromName(it.key) } ?: "无数据",
+                        centerLabel = mainZoneText ?: "无数据",
                         centerValue = if (totalSeconds > 0) {
                             val top = mainZone?.value ?: 0
                             "${top * 100 / totalSeconds}%"
@@ -370,39 +403,6 @@ fun SessionDetailScreen(
                         }
                     }
                 }
-            }
-
-            Spacer(Modifier.height(24.dp))
-        }
-
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-        ) {
-            // 底部操作
-            Button(
-                onClick = onGoHome,
-                modifier = Modifier.fillMaxWidth().height(52.dp),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Icon(Icons.Filled.Home, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("返回首页", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-            }
-            Spacer(Modifier.height(8.dp))
-            OutlinedButton(
-                onClick = { showDeleteConfirm = true },
-                modifier = Modifier.fillMaxWidth().height(48.dp),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Icon(
-                    Icons.Filled.DeleteOutline,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error
-                )
-                Spacer(Modifier.width(8.dp))
-                Text("删除记录", color = MaterialTheme.colorScheme.error)
             }
 
             Spacer(Modifier.height(24.dp))

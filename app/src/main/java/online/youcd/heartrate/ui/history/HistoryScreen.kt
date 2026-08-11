@@ -178,7 +178,7 @@ fun HistoryScreen(
                         ) {
                             Text(
                                 "已隐藏 ${state.hiddenCount} 条未完成的记录 · 展开",
-                                color = MaterialTheme.colorScheme.outline,
+                                color = Color.White.copy(alpha = 0.7f),
                                 style = MaterialTheme.typography.bodySmall
                             )
                         }
@@ -276,14 +276,14 @@ private fun GroupHeader(group: SessionGroup) {
         Text(
             text = group.label,
             style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.outline,
+            color = Color.White.copy(alpha = 0.85f),
             fontWeight = FontWeight.Bold
         )
         Spacer(Modifier.width(8.dp))
         Text(
             text = "${group.sessions.size} 次",
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.outline
+            color = Color.White.copy(alpha = 0.5f)
         )
     }
 }
@@ -298,7 +298,7 @@ private fun SessionCard(
     onLongClick: () -> Unit
 ) {
     val isInvalid = session.durationMillis == 0L && session.maxBpm == 0
-    val contentAlpha = if (isInvalid) 0.45f else 1f
+    val contentAlpha = if (isInvalid) 0.75f else 1f
 
     Surface(
         modifier = Modifier
@@ -355,7 +355,7 @@ private fun SessionCard(
                         text = formatTime(session.startTime),
                         fontSize = 17.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.outline.copy(alpha = contentAlpha)
+                        color = Color.White.copy(alpha = contentAlpha)
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
@@ -375,18 +375,11 @@ private fun SessionCard(
                 }
                 Spacer(Modifier.height(3.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = session.deviceName.ifBlank { "未识别设备" },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = contentAlpha),
-                        maxLines = 1
-                    )
                     if (!isInvalid) {
-                        Spacer(Modifier.width(6.dp))
                         Text(
-                            text = "· 自由训练",
+                            text = "自由训练",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.outline
+                            color = Color.White.copy(alpha = 0.7f)
                         )
                     }
                 }
@@ -414,17 +407,21 @@ private fun SessionCard(
                     },
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.outline.copy(alpha = contentAlpha)
+                    color = if (session.calories > 0) {
+                        Color(0xFFFF2D55).copy(alpha = contentAlpha)
+                    } else {
+                        MaterialTheme.colorScheme.outline.copy(alpha = contentAlpha)
+                    }
                 )
                 Text(
                     text = if (session.calories > 0) "千卡" else "未完成",
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (session.calories > 0) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.outline
+                    color = if (session.calories > 0) Color(0xFFFF2D55).copy(alpha = 0.8f) else Color.White.copy(alpha = 0.6f)
                 )
                 Text(
                     text = if (session.avgBpm > 0) "平均 ${session.avgBpm}" else "",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.outline
+                    color = Color.White.copy(alpha = 0.6f)
                 )
             }
         }

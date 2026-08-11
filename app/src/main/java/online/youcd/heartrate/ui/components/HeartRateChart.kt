@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -107,19 +108,54 @@ fun HeartRateChart(
             fun yFor(value: Float): Float =
                 topPadding + chartHeight * (maxValue - value) / yRange
 
-            // 背景区间色带
-            HeartRateZone.ZONES.forEach { zone ->
-                val topY = yFor(maxHr * zone.maxPercent)
-                val bottomY = yFor(maxHr * zone.minPercent)
+            // 圆角裁剪背景
+            val bgPath = Path().apply {
+                addRoundRect(
+                    androidx.compose.ui.geometry.RoundRect(
+                        left = leftPadding,
+                        top = topPadding,
+                        right = size.width - rightPadding,
+                        bottom = size.height - bottomPadding,
+                        radiusX = 12.dp.toPx(),
+                        radiusY = 12.dp.toPx()
+                    )
+                )
+            }
+            clipPath(bgPath) {
+                // 背景区间色带
+                HeartRateZone.ZONES.forEach { zone ->
+                    val topY = yFor(maxHr * zone.maxPercent)
+                    val bottomY = yFor(maxHr * zone.minPercent)
+                    drawRect(
+                        color = Color(zone.color).copy(alpha = 0.09f),
+                        topLeft = Offset(leftPadding, topY),
+                        size = androidx.compose.ui.geometry.Size(chartWidth, (bottomY - topY))
+                    )
+                }
+
+                // 图表区底部渐变底色
                 drawRect(
-                    color = Color(zone.color).copy(alpha = 0.08f),
-                    topLeft = Offset(leftPadding, topY),
-                    size = androidx.compose.ui.geometry.Size(chartWidth, (bottomY - topY))
+                    color = Color(0xFF000000).copy(alpha = 0.12f),
+                    topLeft = Offset(leftPadding, topPadding),
+                    size = androidx.compose.ui.geometry.Size(chartWidth, chartHeight)
                 )
             }
 
-            // Y 轴刻度
-            val gridColor = outline.copy(alpha = 0.15f)
+            // 区间边界分隔线
+            HeartRateZone.ZONES.forEach { zone ->
+                val y = yFor(maxHr * zone.maxPercent)
+                if (y > topPadding && y < size.height - bottomPadding) {
+                    drawLine(
+                        color = Color.White.copy(alpha = 0.14f),
+                        start = Offset(leftPadding, y),
+                        end = Offset(size.width - rightPadding, y),
+                        strokeWidth = 1.dp.toPx()
+                    )
+                }
+            }
+
+            // Y 轴刻度网格（虚线）
+            val gridColor = outline.copy(alpha = 0.12f)
             val ySteps = 5
             for (i in 0..ySteps) {
                 val value = minValue + yRange * i / ySteps
@@ -128,7 +164,10 @@ fun HeartRateChart(
                     color = gridColor,
                     start = Offset(leftPadding, y),
                     end = Offset(size.width - rightPadding, y),
-                    strokeWidth = 1.dp.toPx()
+                    strokeWidth = 1.dp.toPx(),
+                    pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(
+                        floatArrayOf(6f, 6f)
+                    )
                 )
                 val label = textMeasurer.measure(value.roundToInt().toString(), labelStyle)
                 drawText(
@@ -216,12 +255,12 @@ fun HeartRateChart(
             drawPath(
                 path = linePath,
                 color = lineColor.copy(alpha = 0.35f),
-                style = Stroke(width = 7.dp.toPx(), cap = StrokeCap.Round)
+                style = Stroke(width = 3.5.dp.toPx(), cap = StrokeCap.Round)
             )
             drawPath(
                 path = linePath,
                 color = lineColor,
-                style = Stroke(width = 2.8.dp.toPx(), cap = StrokeCap.Round)
+                style = Stroke(width = 1.5.dp.toPx(), cap = StrokeCap.Round)
             )
 
             // 最高 / 最低点标注

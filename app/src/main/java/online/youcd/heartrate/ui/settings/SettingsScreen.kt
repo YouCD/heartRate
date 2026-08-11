@@ -3,16 +3,37 @@ package online.youcd.heartrate.ui.settings
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -23,7 +44,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -38,6 +62,7 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -48,11 +73,16 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -119,6 +149,9 @@ fun SettingsScreen(
     var maxHrMode by remember { mutableStateOf(profile.maxHrMode) }
     var manualMaxHr by remember { mutableStateOf(profile.manualMaxHr.toString()) }
     var saveState by remember { mutableStateOf<Boolean?>(null) }
+    var showImportConfirm by remember { mutableStateOf(false) }
+    var showNumberInputDialog by remember { mutableStateOf(false) }
+    var editingField by remember { mutableStateOf("") }
 
     LaunchedEffect(profile) {
         nickname = profile.nickname
@@ -142,6 +175,7 @@ fun SettingsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(Color(0xFF0A0A0A))
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp)
     ) {
@@ -150,9 +184,9 @@ fun SettingsScreen(
             text = "设置",
             fontSize = 22.sp,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
+            color = Color.White
         )
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(20.dp))
 
         SettingsCard(title = "个人资料") {
             SettingsRow(
@@ -180,30 +214,14 @@ fun SettingsScreen(
             SettingsRow(
                 label = "性别",
                 content = {
-                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                        SegmentedButton(
-                            selected = gender == Gender.MALE,
-                            onClick = { gender = Gender.MALE },
-                            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                            colors = SegmentedButtonDefaults.colors(
-                                activeContainerColor = MaterialTheme.colorScheme.primary,
-                                activeContentColor = MaterialTheme.colorScheme.onSurface
-                            )
-                        ) {
-                            Text("男", fontWeight = FontWeight.Medium)
-                        }
-                        SegmentedButton(
-                            selected = gender == Gender.FEMALE,
-                            onClick = { gender = Gender.FEMALE },
-                            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                            colors = SegmentedButtonDefaults.colors(
-                                activeContainerColor = MaterialTheme.colorScheme.primary,
-                                activeContentColor = MaterialTheme.colorScheme.onSurface
-                            )
-                        ) {
-                            Text("女", fontWeight = FontWeight.Medium)
-                        }
-                    }
+                    AnimatedSegmentedControl(
+                        options = listOf("男", "女"),
+                        selectedIndex = if (gender == Gender.MALE) 0 else 1,
+                        onSelect = { index ->
+                            gender = if (index == 0) Gender.MALE else Gender.FEMALE
+                        },
+                        height = 40.dp
+                    )
                 }
             )
             SettingsDivider()
@@ -214,82 +232,118 @@ fun SettingsScreen(
                 onMonthChange = { birthMonth = it }
             )
             SettingsDivider()
-            NumberSettingRow(
+            ListItemSettingRow(
                 label = "身高",
-                value = height,
-                onValueChange = { if (it.length <= 3) height = it.filter(Char::isDigit) },
-                unit = "cm"
+                value = if (height.toIntOrNull() ?: 0 > 0) height else "--",
+                unit = "cm",
+                onEdit = {
+                    showNumberInputDialog = true
+                    editingField = "身高"
+                }
             )
             SettingsDivider()
-            NumberSettingRow(
+            ListItemSettingRow(
                 label = "体重",
-                value = weight,
-                onValueChange = { if (it.length <= 3) weight = it.filter(Char::isDigit) },
-                unit = "kg"
+                value = if (weight.toIntOrNull() ?: 0 > 0) weight else "--",
+                unit = "kg",
+                onEdit = {
+                    showNumberInputDialog = true
+                    editingField = "体重"
+                }
             )
+            val heightCm = height.toIntOrNull() ?: 0
+            val weightKg = weight.toIntOrNull() ?: 0
+            if (heightCm > 0 && weightKg > 0) {
+                val bmi = weightKg / ((heightCm / 100.0) * (heightCm / 100.0))
+                val bmiText = String.format(Locale.US, "%.1f", bmi)
+                val bmiDesc = when {
+                    bmi < 18.5 -> "偏瘦"
+                    bmi < 24 -> "正常"
+                    bmi < 28 -> "超重"
+                    else -> "肥胖"
+                }
+                Text(
+                    text = "BMI $bmiText · $bmiDesc",
+                    fontSize = 12.sp,
+                    color = Color(0xFF636366),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 100.dp, bottom = 8.dp)
+                )
+            }
         }
 
         Spacer(Modifier.height(14.dp))
 
         SettingsCard(title = "心率设置") {
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                SegmentedButton(
-                    selected = maxHrMode == MaxHrMode.AUTO,
-                    onClick = { maxHrMode = MaxHrMode.AUTO },
-                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                    colors = SegmentedButtonDefaults.colors(
-                        activeContainerColor = MaterialTheme.colorScheme.primary,
-                        activeContentColor = MaterialTheme.colorScheme.onSurface
-                    )
-                ) {
-                    Text("自动", fontWeight = FontWeight.Medium)
-                }
-                SegmentedButton(
-                    selected = maxHrMode == MaxHrMode.MANUAL,
-                    onClick = { maxHrMode = MaxHrMode.MANUAL },
-                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                    colors = SegmentedButtonDefaults.colors(
-                        activeContainerColor = MaterialTheme.colorScheme.primary,
-                        activeContentColor = MaterialTheme.colorScheme.onSurface
-                    )
-                ) {
-                    Text("手动", fontWeight = FontWeight.Medium)
-                }
-            }
+            AnimatedSegmentedControl(
+                options = listOf("自动", "手动"),
+                selectedIndex = if (maxHrMode == MaxHrMode.AUTO) 0 else 1,
+                onSelect = { index ->
+                    maxHrMode = if (index == 0) MaxHrMode.AUTO else MaxHrMode.MANUAL
+                },
+                height = 44.dp
+            )
 
             Spacer(Modifier.height(20.dp))
 
-            if (maxHrMode == MaxHrMode.MANUAL) {
-                SettingsRow(
-                    label = "最大心率",
-                    content = {
-                        OutlinedTextField(
-                            value = manualMaxHr,
-                            onValueChange = {
-                                if (it.length <= 3) manualMaxHr = it.filter(Char::isDigit)
-                            },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            textStyle = MaterialTheme.typography.titleMedium,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedContainerColor = Color.Transparent,
-                                unfocusedContainerColor = Color.Transparent,
-                                focusedBorderColor = Color.Transparent,
-                                unfocusedBorderColor = Color.Transparent,
-                                cursorColor = MaterialTheme.colorScheme.primary
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                )
-                Spacer(Modifier.height(12.dp))
+            // 手动模式展开区（动画）
+            AnimatedVisibility(
+                visible = maxHrMode == MaxHrMode.MANUAL,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                Column {
+                    SettingsRow(
+                        label = "最大心率",
+                        content = {
+                            OutlinedTextField(
+                                value = manualMaxHr,
+                                onValueChange = {
+                                    if (it.length <= 3) manualMaxHr = it.filter(Char::isDigit)
+                                },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                textStyle = MaterialTheme.typography.titleMedium,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedContainerColor = Color(0xFF2C2C2E),
+                                    unfocusedContainerColor = Color(0xFF2C2C2E),
+                                    focusedBorderColor = Color(0xFFFF2D55),
+                                    unfocusedBorderColor = Color(0xFF2C2C2E),
+                                    cursorColor = Color(0xFFFF2D55)
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = "根据公式 220 - 年龄，建议值为 ${computedMaxHr} BPM",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF636366),
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
 
-            // 结果展示
+            Spacer(Modifier.height(12.dp))
+
+            // 结果展示（心形动态脉动）
+            val pulseTransition = rememberInfiniteTransition(label = "heartPulse")
+            val pulseScale by pulseTransition.animateFloat(
+                initialValue = 1f,
+                targetValue = 1.15f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(durationMillis = 800, easing = FastOutSlowInEasing),
+                    repeatMode = RepeatMode.Reverse
+                ),
+                label = "pulseScale"
+            )
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.04f), RoundedCornerShape(12.dp))
+                    .background(Color(0xFF2C2C2E), RoundedCornerShape(12.dp))
                     .padding(vertical = 18.dp),
                 contentAlignment = Alignment.Center
             ) {
@@ -298,7 +352,12 @@ fun SettingsScreen(
                         Icons.Filled.Favorite,
                         contentDescription = null,
                         tint = SuccessGreen,
-                        modifier = Modifier.size(28.dp)
+                        modifier = Modifier
+                            .size(28.dp)
+                            .graphicsLayer {
+                                scaleX = pulseScale
+                                scaleY = pulseScale
+                            }
                     )
                     Spacer(Modifier.width(10.dp))
                     Text(
@@ -311,76 +370,103 @@ fun SettingsScreen(
                     Text(
                         text = "bpm",
                         style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = Color(0xFFA1A1A6)
                     )
                 }
             }
             Spacer(Modifier.height(8.dp))
-            Text(
-                text = if (maxHrMode == MaxHrMode.AUTO) {
-                    "基于标准公式：208 - 0.7 × 年龄"
-                } else {
-                    "自定义最大心率值"
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center
-            )
+            if (maxHrMode == MaxHrMode.AUTO) {
+                Text(
+                    text = "根据您的年龄（$computedAge 岁），系统自动计算最大心率为 $computedMaxHr BPM",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF636366),
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
+                )
+            } else {
+                Text(
+                    text = "自定义最大心率值",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF636366),
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
+                )
+            }
         }
 
         Spacer(Modifier.height(14.dp))
 
         SettingsCard(title = "数据备份") {
-            SettingsRow(
-                label = "导出备份",
-                content = {
-                    Button(
-                        onClick = {
-                            val fileName =
-                                "heartRate_" + SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
-                                    .format(Date()) + ".zip"
-                            exportLauncher.launch(fileName)
-                        },
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text("导出")
-                    }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedButton(
+                    onClick = {
+                        val fileName =
+                            "heartRate_" + SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
+                                .format(Date()) + ".zip"
+                        exportLauncher.launch(fileName)
+                    },
+                    modifier = Modifier.weight(1f).height(40.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, Color(0xFF2C2C2E)),
+                    colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+                        containerColor = Color(0xFF2C2C2E),
+                        contentColor = Color.White
+                    )
+                ) {
+                    Text("导出备份", fontWeight = FontWeight.Medium)
                 }
-            )
-            SettingsDivider()
-            SettingsRow(
-                label = "导入备份",
-                content = {
-                    Button(
-                        onClick = { importLauncher.launch(arrayOf("application/zip")) },
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text("导入")
-                    }
+                OutlinedButton(
+                    onClick = { showImportConfirm = true },
+                    modifier = Modifier.weight(1f).height(40.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, Color(0xFF2C2C2E)),
+                    colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+                        containerColor = Color(0xFF2C2C2E),
+                        contentColor = Color.White
+                    )
+                ) {
+                    Text("导入备份", fontWeight = FontWeight.Medium)
                 }
-            )
-            Spacer(Modifier.height(6.dp))
+            }
             Text(
-                text = "导出为 heartRate_时间戳.zip，包含训练历史与个人资料。导入将覆盖当前数据。",
+                text = "导出文件包含训练历史与个人资料，导入将覆盖当前数据。",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                fontSize = 12.sp,
+                lineHeight = 18.sp,
+                color = Color(0xFF636366),
+                modifier = Modifier.padding(bottom = 12.dp)
             )
         }
 
         Spacer(Modifier.height(14.dp))
 
         SettingsCard(title = "关于") {
-            SettingsRow(
-                label = "版本",
-                content = {
-                    Text(
-                        text = BuildConfig.VERSION_NAME,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "版本号",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.White,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    text = BuildConfig.VERSION_NAME,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontFamily = FontFamily.Monospace,
+                    color = Color(0xFF8E8E93)
+                )
+            }
         }
 
         Spacer(Modifier.height(32.dp))
@@ -414,26 +500,96 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(52.dp),
-            shape = RoundedCornerShape(16.dp)
+            shape = RoundedCornerShape(16.dp),
+            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                containerColor = Color(0xFFFF2D55),
+                contentColor = Color.White
+            )
         ) {
-            if (saveState == true) {
-                Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = "已保存",
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            } else {
-                Text(
-                    text = "保存设置",
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Bold
-                )
+            when {
+                saveState == true -> {
+                    Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(20.dp), tint = Color(0xFF34C759))
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "已保存",
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                else -> {
+                    Text(
+                        text = "保存设置",
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
 
         Spacer(Modifier.height(32.dp))
+    }
+
+    if (showImportConfirm) {
+        AlertDialog(
+            onDismissRequest = { showImportConfirm = false },
+            title = { Text("确认导入备份？") },
+            text = { Text("导入将覆盖当前所有训练数据和个人资料，且无法恢复。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showImportConfirm = false
+                    importLauncher.launch(arrayOf("application/zip"))
+                }) {
+                    Text("继续导入", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showImportConfirm = false }) {
+                    Text("取消")
+                }
+            }
+        )
+    }
+
+    if (showNumberInputDialog) {
+        var inputValue by remember {
+            mutableStateOf(
+                if (editingField == "身高") height else weight
+            )
+        }
+        AlertDialog(
+            onDismissRequest = { showNumberInputDialog = false },
+            title = { Text("编辑${editingField}") },
+            text = {
+                OutlinedTextField(
+                    value = inputValue,
+                    onValueChange = { if (it.length <= 3) inputValue = it.filter(Char::isDigit) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    textStyle = MaterialTheme.typography.titleMedium,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = Color(0xFF2C2C2E),
+                        unfocusedContainerColor = Color(0xFF2C2C2E),
+                        focusedBorderColor = Color(0xFFFF2D55),
+                        unfocusedBorderColor = Color(0xFF2C2C2E),
+                        cursorColor = Color(0xFFFF2D55)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (editingField == "身高") height = inputValue else weight = inputValue
+                    showNumberInputDialog = false
+                }) {
+                    Text("确定", color = Color(0xFFFF2D55))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNumberInputDialog = false }) {
+                    Text("取消")
+                }
+            }
+        )
     }
 }
 
@@ -442,18 +598,19 @@ private fun SettingsCard(
     title: String,
     content: @Composable () -> Unit
 ) {
-    Column {
+    Column(modifier = Modifier.padding(bottom = 14.dp)) {
         Text(
             text = title.uppercase(),
             style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 1.sp,
+            fontSize = 12.sp,
+            color = Color(0xFF8E8E93),
+            fontWeight = FontWeight.Medium,
+            letterSpacing = 0.5.sp,
             modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
         )
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            color = MaterialTheme.colorScheme.surfaceVariant,
+            color = Color(0xFF1C1C1E),
             shape = RoundedCornerShape(16.dp)
         ) {
             Column(
@@ -493,8 +650,7 @@ private fun BirthDateSettingRow(
     onYearChange: (Int) -> Unit,
     onMonthChange: (Int) -> Unit
 ) {
-    var yearMenuOpen by remember { mutableStateOf(false) }
-    var monthMenuOpen by remember { mutableStateOf(false) }
+    var dateMenuOpen by remember { mutableStateOf(false) }
     val currentYear = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
     val ageText = UserProfile.computeAge(birthYear, birthMonth)
 
@@ -507,19 +663,37 @@ private fun BirthDateSettingRow(
         Text(
             text = "出生年月",
             style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Medium,
+            color = Color.White,
             modifier = Modifier.width(96.dp)
         )
         Box {
-            OutlinedButton(
-                onClick = { yearMenuOpen = true },
-                shape = RoundedCornerShape(10.dp)
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable { dateMenuOpen = true }
+                    .background(Color(0xFF2C2C2E))
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("$birthYear 年", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = "$birthYear 年 $birthMonth 月",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontSize = 15.sp,
+                    color = Color.White
+                )
+                Spacer(Modifier.width(6.dp))
+                Icon(
+                    Icons.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = Color(0xFF8E8E93),
+                    modifier = Modifier.size(18.dp)
+                )
             }
             DropdownMenu(
-                expanded = yearMenuOpen,
-                onDismissRequest = { yearMenuOpen = false },
+                expanded = dateMenuOpen,
+                onDismissRequest = { dateMenuOpen = false },
                 modifier = Modifier.height(300.dp)
             ) {
                 (UserProfile.MIN_BIRTH_YEAR..currentYear).reversed().forEach { y ->
@@ -527,83 +701,76 @@ private fun BirthDateSettingRow(
                         text = { Text("$y 年") },
                         onClick = {
                             onYearChange(y)
-                            yearMenuOpen = false
+                            dateMenuOpen = false
                         }
                     )
                 }
-            }
-        }
-        Spacer(Modifier.width(8.dp))
-        Box {
-            OutlinedButton(
-                onClick = { monthMenuOpen = true },
-                shape = RoundedCornerShape(10.dp)
-            ) {
-                Text("$birthMonth 月", style = MaterialTheme.typography.titleMedium)
-            }
-            DropdownMenu(
-                expanded = monthMenuOpen,
-                onDismissRequest = { monthMenuOpen = false },
-                modifier = Modifier.height(300.dp)
-            ) {
+                HorizontalDivider(color = Color(0xFF2C2C2E))
                 (1..12).forEach { m ->
                     DropdownMenuItem(
                         text = { Text("$m 月") },
                         onClick = {
                             onMonthChange(m)
-                            monthMenuOpen = false
+                            dateMenuOpen = false
                         }
                     )
                 }
             }
         }
-        Spacer(Modifier.width(10.dp))
+        Spacer(Modifier.weight(1f))
         Text(
-            text = "约 $ageText 岁",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            text = "年龄 $ageText",
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = SuccessGreen
         )
     }
 }
 
 @Composable
-private fun NumberSettingRow(
+private fun ListItemSettingRow(
     label: String,
     value: String,
-    onValueChange: (String) -> Unit,
+    onEdit: () -> Unit,
     unit: String
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 10.dp),
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(onClick = onEdit)
+            .padding(vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text = label,
             style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Medium,
+            color = Color.White,
             modifier = Modifier.width(96.dp)
         )
-        OutlinedTextField(
-            value = value,
-            onValueChange = onValueChange,
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            textStyle = MaterialTheme.typography.titleMedium,
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = Color.Transparent,
-                unfocusedContainerColor = Color.Transparent,
-                focusedBorderColor = Color.Transparent,
-                unfocusedBorderColor = Color.Transparent,
-                cursorColor = MaterialTheme.colorScheme.primary
-            ),
-            modifier = Modifier.weight(1f)
+        Spacer(Modifier.weight(1f))
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleMedium,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.White
         )
+        Spacer(Modifier.width(4.dp))
         Text(
             text = unit,
             style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            fontSize = 14.sp,
+            color = Color(0xFF8E8E93)
+        )
+        Spacer(Modifier.width(4.dp))
+        Icon(
+            Icons.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = Color(0xFF636366),
+            modifier = Modifier.size(20.dp)
         )
     }
 }
@@ -611,4 +778,66 @@ private fun NumberSettingRow(
 @Composable
 private fun SettingsDivider() {
     HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.06f))
+}
+
+@Composable
+private fun AnimatedSegmentedControl(
+    options: List<String>,
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    height: Dp = 40.dp
+) {
+    val containerColor = Color(0xFF2C2C2E)
+    val selectedColor = Color(0xFFFF2D55)
+    val unselectedText = Color(0xFFA1A1A6)
+
+    BoxWithConstraints(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(height)
+            .clip(RoundedCornerShape(12.dp))
+            .background(containerColor)
+    ) {
+        val itemWidth = maxWidth / options.size
+        val indicatorOffset by animateDpAsState(
+            targetValue = itemWidth * selectedIndex,
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioMediumBouncy,
+                stiffness = Spring.StiffnessMediumLow
+            ),
+            label = "indicatorOffset"
+        )
+
+        // 弹性滑动选中块
+        Box(
+            modifier = Modifier
+                .offset(x = indicatorOffset)
+                .width(itemWidth)
+                .fillMaxHeight()
+                .padding(3.dp)
+                .clip(RoundedCornerShape(9.dp))
+                .background(selectedColor)
+        )
+
+        // 选项文本
+        Row(modifier = Modifier.fillMaxSize()) {
+            options.forEachIndexed { index, label ->
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clickable { onSelect(index) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = label,
+                        fontSize = 15.sp,
+                        fontWeight = if (index == selectedIndex) FontWeight.Bold else FontWeight.Medium,
+                        color = if (index == selectedIndex) Color.White else unselectedText
+                    )
+                }
+            }
+        }
+    }
 }

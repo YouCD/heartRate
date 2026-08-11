@@ -46,6 +46,7 @@ class SessionManager @Inject constructor(
     private var tickerJob: Job? = null
 
     private var lastZoneEpoch: Long = 0L
+    private var lastZoneElapsed: Long = 0L
     private var zoneCarryMillis: Long = 0L
 
     val isRunning: Boolean
@@ -60,6 +61,7 @@ class SessionManager @Inject constructor(
             _zoneSeconds.value = List(HeartRateZone.ZONES.size) { 0 }
             _elapsedMillis.value = 0L
             lastZoneEpoch = 0L
+            lastZoneElapsed = 0L
             zoneCarryMillis = 0L
             _sessionState.value = SessionState.RUNNING
             startTicker()
@@ -96,6 +98,7 @@ class SessionManager @Inject constructor(
             _zoneSeconds.value = List(HeartRateZone.ZONES.size) { 0 }
             _elapsedMillis.value = 0L
             lastZoneEpoch = 0L
+            lastZoneElapsed = 0L
             zoneCarryMillis = 0L
         }
     }
@@ -104,10 +107,11 @@ class SessionManager @Inject constructor(
     suspend fun onHeartRate(bpm: Int, maxHr: Int) {
         if (_sessionState.value != SessionState.RUNNING) return
         val zoneId = HeartRateZone.from(bpm, maxHr).id
-        val now = System.currentTimeMillis()
-        val elapsedSinceLast = if (lastZoneEpoch == 0L) 1000L else now - lastZoneEpoch
-        lastZoneEpoch = now
-        zoneCarryMillis += elapsedSinceLast
+        val elapsed = _elapsedMillis.value
+        val elapsedSinceLast = if (lastZoneEpoch == 0L) 1000L else elapsed - lastZoneElapsed
+        lastZoneEpoch = 1L
+        lastZoneElapsed = elapsed
+        zoneCarryMillis += elapsedSinceLast.coerceIn(0L, 10_000L)
         val seconds = (zoneCarryMillis / 1000L).toInt()
         zoneCarryMillis %= 1000L
         _sessionSamples.update { it + bpm }

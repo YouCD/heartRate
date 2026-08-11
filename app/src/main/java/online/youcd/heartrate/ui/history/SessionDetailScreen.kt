@@ -1,6 +1,9 @@
 package online.youcd.heartrate.ui.history
 
+import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -38,26 +41,34 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.layer.GraphicsLayer
+import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import kotlinx.coroutines.launch
 import online.youcd.heartrate.data.model.HeartRateZone
 import online.youcd.heartrate.ui.components.AnimatedNumber
 import online.youcd.heartrate.ui.components.DonutChart
 import online.youcd.heartrate.ui.components.HeartRateChart
 import online.youcd.heartrate.ui.components.XAxisMode
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 @Composable
 fun SessionDetailScreen(
@@ -68,12 +79,17 @@ fun SessionDetailScreen(
     val session by viewModel.session.collectAsState()
     val heartRates by viewModel.heartRates.collectAsState()
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var xAxisMode by remember { mutableStateOf(XAxisMode.TRAINING_TIME) }
+    val shareLayer = rememberGraphicsLayer()
+    val shareBg = MaterialTheme.colorScheme.surface
 
-    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+    Column(
+        modifier = Modifier.fillMaxSize()
+    ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onBack) {
@@ -95,14 +111,9 @@ fun SessionDetailScreen(
             }
             session?.let { s ->
                 IconButton(onClick = {
-                    val shareText = buildShareText(s)
-                    val intent = Intent(Intent.ACTION_SEND).apply {
-                        type = "text/plain"
-                        putExtra(Intent.EXTRA_TEXT, shareText)
+                    scope.launch {
+                        shareSessionScreenshot(context, shareLayer)
                     }
-                    context.startActivity(
-                        Intent.createChooser(intent, "分享训练记录")
-                    )
                 }) {
                     Icon(Icons.Filled.Share, contentDescription = "分享")
                 }
@@ -121,10 +132,18 @@ fun SessionDetailScreen(
 
         Column(
             modifier = Modifier
-                .fillMaxSize()
+                .weight(1f)
                 .verticalScroll(rememberScrollState())
-        ) {
-            // Hero 消耗热量
+                .padding(horizontal = 16.dp)
+                .drawWithContent {
+                    val contentScope = this
+                    shareLayer.record {
+                        drawRect(color = shareBg)
+                        contentScope.drawContent()
+                    }
+                    contentScope.drawContent()
+                }
+        ) {            // Hero 消耗热量
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 color = MaterialTheme.colorScheme.surfaceVariant,
@@ -354,7 +373,13 @@ fun SessionDetailScreen(
             }
 
             Spacer(Modifier.height(24.dp))
+        }
 
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+        ) {
             // 底部操作
             Button(
                 onClick = onGoHome,
@@ -434,14 +459,28 @@ private fun DetailPill(label: String, value: String, modifier: Modifier = Modifi
     }
 }
 
-private fun buildShareText(s: online.youcd.heartrate.data.db.SessionEntity): String {
-    return """
-        【训练回顾】
-        时间：${formatDate(s.startTime)}
-        时长：${formatDuration(s.durationMillis)}
-        平均心率：${s.avgBpm} BPM　最高：${s.maxBpm} BPM
-        消耗热量：${s.calories} 千卡
-    """.trimIndent()
+private suspend fun shareSessionScreenshot(
+    context: Context,
+    layer: GraphicsLayer
+) {
+    val bitmap = layer.toImageBitmap().asAndroidBitmap()
+    val file = File(context.cacheDir, "share_${System.currentTimeMillis()}.png")
+    file.outputStream().use { out ->
+        bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+    }
+    val uri = FileProvider.getUriForFile(
+        context,
+        "${context.packageName}.fileprovider",
+        file
+    )
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "image/png"
+        putExtra(Intent.EXTRA_STREAM, uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    context.startActivity(
+        Intent.createChooser(intent, "分享训练回顾")
+    )
 }
 
 private fun buildSummary(s: online.youcd.heartrate.data.db.SessionEntity): String {

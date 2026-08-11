@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.LinkOff
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
@@ -80,7 +81,7 @@ internal fun BpmNumber(bpm: Int, color: Color) {
         scaleY = scale.value
     }) {
         Text(
-            text = if (bpm > 0) bpm.toString() else "--",
+            text = if (bpm > 0) bpm.toString() else "",
             fontSize = 108.sp,
             fontWeight = FontWeight.Bold,
             color = color,
@@ -248,88 +249,136 @@ private fun ConnectionDot(connectionState: BleManager.ConnectionState) {
 internal fun SessionControls(
     sessionState: SessionState,
     isConnected: Boolean,
+    elapsedMillis: Long,
     onStart: () -> Unit,
     onPause: () -> Unit,
     onResume: () -> Unit,
     onStopRequest: () -> Unit
 ) {
-    Row(
+    Surface(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally)
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(20.dp)
     ) {
-        when (sessionState) {
-            SessionState.IDLE -> {
-                Button(
-                    onClick = onStart,
-                    enabled = isConnected,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(54.dp),
-                    shape = RoundedCornerShape(16.dp)
-                ) {
-                    Icon(Icons.Filled.PlayArrow, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = if (isConnected) "开始训练" else "请先连接设备",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // 左侧：训练时长
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "训练时长",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = formatElapsed(elapsedMillis),
+                    fontSize = 32.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    fontFamily = FontFamily.Monospace,
+                    color = if (sessionState == SessionState.PAUSED) {
+                        MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    }
+                )
             }
 
-            SessionState.RUNNING -> {
-                FilledTonalButton(
-                    onClick = onPause,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(54.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    )
-                ) {
-                    Icon(Icons.Filled.Pause, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("暂停", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                }
-                Button(
-                    onClick = onStopRequest,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(54.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Icon(Icons.Filled.Stop, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("结束", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                }
-            }
+            Spacer(Modifier.width(12.dp))
 
-            SessionState.PAUSED -> {
-                Button(
-                    onClick = onResume,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(54.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen)
-                ) {
-                    Icon(Icons.Filled.PlayArrow, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("继续", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            // 右侧：操作按钮
+            when (sessionState) {
+                SessionState.IDLE -> {
+                    Button(
+                        onClick = onStart,
+                        enabled = isConnected,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(52.dp),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        if (isConnected) {
+                            Icon(Icons.Filled.PlayArrow, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = "开始训练",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        } else {
+                            Icon(
+                                Icons.Filled.LinkOff,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = "请先连接设备",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                 }
-                Button(
-                    onClick = onStopRequest,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(54.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Icon(Icons.Filled.Stop, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("结束", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+
+                SessionState.RUNNING -> {
+                    FilledTonalButton(
+                        onClick = onPause,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(52.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        )
+                    ) {
+                        Icon(Icons.Filled.Pause, contentDescription = null)
+                        Spacer(Modifier.width(6.dp))
+                        Text("暂停", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Button(
+                        onClick = onStopRequest,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(52.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Icon(Icons.Filled.Stop, contentDescription = null)
+                        Spacer(Modifier.width(6.dp))
+                        Text("结束", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                SessionState.PAUSED -> {
+                    Button(
+                        onClick = onResume,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(52.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen)
+                    ) {
+                        Icon(Icons.Filled.PlayArrow, contentDescription = null)
+                        Spacer(Modifier.width(6.dp))
+                        Text("继续", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Button(
+                        onClick = onStopRequest,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(52.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Icon(Icons.Filled.Stop, contentDescription = null)
+                        Spacer(Modifier.width(6.dp))
+                        Text("结束", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }

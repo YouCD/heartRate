@@ -42,6 +42,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.KeyboardArrowRight
@@ -92,10 +93,14 @@ import online.youcd.heartrate.BuildConfig
 import online.youcd.heartrate.data.model.Gender
 import online.youcd.heartrate.data.model.MaxHrMode
 import online.youcd.heartrate.data.model.UserProfile
+import online.youcd.heartrate.data.update.UpdateChecker
+import online.youcd.heartrate.data.update.UpdateDownloader
+import online.youcd.heartrate.data.update.UpdateInfo
 import online.youcd.heartrate.ui.theme.SuccessGreen
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -152,6 +157,9 @@ fun SettingsScreen(
     var showImportConfirm by remember { mutableStateOf(false) }
     var showNumberInputDialog by remember { mutableStateOf(false) }
     var editingField by remember { mutableStateOf("") }
+    var checkingUpdate by remember { mutableStateOf(false) }
+    var updateInfo by remember { mutableStateOf<UpdateInfo?>(null) }
+    var updateError by remember { mutableStateOf(false) }
 
     LaunchedEffect(profile) {
         nickname = profile.nickname
@@ -176,17 +184,22 @@ fun SettingsScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF0A0A0A))
-            .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp)
     ) {
-        Spacer(Modifier.height(16.dp))
+        // 固定 header
         Text(
             text = "设置",
-            fontSize = 22.sp,
+            style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
-            color = Color.White
+            color = Color.White,
+            modifier = Modifier.padding(top = 16.dp, bottom = 20.dp)
         )
-        Spacer(Modifier.height(20.dp))
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+        ) {
 
         SettingsCard(title = "个人资料") {
             SettingsRow(
@@ -242,17 +255,33 @@ fun SettingsScreen(
                 }
             )
             SettingsDivider()
-            ListItemSettingRow(
-                label = "体重",
-                value = if (weight.toIntOrNull() ?: 0 > 0) weight else "--",
-                unit = "kg",
-                onEdit = {
-                    showNumberInputDialog = true
-                    editingField = "体重"
-                }
-            )
             val heightCm = height.toIntOrNull() ?: 0
             val weightKg = weight.toIntOrNull() ?: 0
+            val idealWeight = if (heightCm > 0) {
+                (22.0 * (heightCm / 100.0) * (heightCm / 100.0)).roundToInt()
+            } else 0
+            if (weightKg > 0 && idealWeight > 0) {
+                ListItemSettingRow(
+                    label = "体重",
+                    value = weight.toString(),
+                    unit = "kg",
+                    extra = "标准 ${idealWeight}kg",
+                    onEdit = {
+                        showNumberInputDialog = true
+                        editingField = "体重"
+                    }
+                )
+            } else {
+                ListItemSettingRow(
+                    label = "体重",
+                    value = if (weightKg > 0) weight else "--",
+                    unit = "kg",
+                    onEdit = {
+                        showNumberInputDialog = true
+                        editingField = "体重"
+                    }
+                )
+            }
             if (heightCm > 0 && weightKg > 0) {
                 val bmi = weightKg / ((heightCm / 100.0) * (heightCm / 100.0))
                 val bmiText = String.format(Locale.US, "%.1f", bmi)
@@ -263,12 +292,13 @@ fun SettingsScreen(
                     else -> "肥胖"
                 }
                 Text(
-                    text = "BMI $bmiText · $bmiDesc",
+                    text = "BMI $bmiText · $bmiDesc · 标准 18.5-24",
                     fontSize = 12.sp,
                     color = Color(0xFF636366),
+                    textAlign = TextAlign.Center,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 100.dp, bottom = 8.dp)
+                        .padding(bottom = 8.dp)
                 )
             }
         }
@@ -305,6 +335,7 @@ fun SettingsScreen(
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 textStyle = MaterialTheme.typography.titleMedium,
+                                shape = RoundedCornerShape(12.dp),
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedContainerColor = Color(0xFF2C2C2E),
                                     unfocusedContainerColor = Color(0xFF2C2C2E),
@@ -439,7 +470,10 @@ fun SettingsScreen(
                 fontSize = 12.sp,
                 lineHeight = 18.sp,
                 color = Color(0xFF636366),
-                modifier = Modifier.padding(bottom = 12.dp)
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp)
             )
         }
 
@@ -466,6 +500,55 @@ fun SettingsScreen(
                     fontFamily = FontFamily.Monospace,
                     color = Color(0xFF8E8E93)
                 )
+            }
+            SettingsDivider()
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable(enabled = !checkingUpdate) {
+                        checkingUpdate = true
+                        updateError = false
+                        updateInfo = null
+                        scope.launch {
+                            val info = UpdateChecker.checkForUpdate()
+                            checkingUpdate = false
+                            if (info != null) {
+                                if (UpdateChecker.isNewer(info.versionName, BuildConfig.VERSION_NAME)) {
+                                    updateInfo = info
+                                } else {
+                                    Toast.makeText(context, "当前已是最新版本", Toast.LENGTH_SHORT).show()
+                                }
+                            } else {
+                                updateError = true
+                            }
+                        }
+                    }
+                    .padding(vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "检查更新",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.White,
+                    modifier = Modifier.weight(1f)
+                )
+                if (checkingUpdate) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = Color(0xFFFF2D55)
+                    )
+                } else {
+                    Text(
+                        text = if (updateError) "检查失败，点击重试" else "v${BuildConfig.VERSION_NAME}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontSize = 13.sp,
+                        color = if (updateError) Color(0xFFFF3B30) else Color(0xFF8E8E93)
+                    )
+                }
             }
         }
 
@@ -527,6 +610,7 @@ fun SettingsScreen(
         }
 
         Spacer(Modifier.height(32.dp))
+        }
     }
 
     if (showImportConfirm) {
@@ -591,6 +675,41 @@ fun SettingsScreen(
             }
         )
     }
+
+    updateInfo?.let { info ->
+        AlertDialog(
+            onDismissRequest = { updateInfo = null },
+            title = { Text("发现新版本 v${info.versionName}") },
+            text = {
+                Column {
+                    Text(
+                        text = info.releaseNotes,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        text = "当前版本 v${BuildConfig.VERSION_NAME}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF8E8E93)
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    updateInfo = null
+                    UpdateDownloader.download(context, info.downloadUrl)
+                }) {
+                    Text("下载更新", color = Color(0xFFFF2D55))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { updateInfo = null }) {
+                    Text("稍后再说")
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -651,6 +770,7 @@ private fun BirthDateSettingRow(
     onMonthChange: (Int) -> Unit
 ) {
     var dateMenuOpen by remember { mutableStateOf(false) }
+    var selectingMonth by remember { mutableStateOf(false) }
     val currentYear = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
     val ageText = UserProfile.computeAge(birthYear, birthMonth)
 
@@ -694,26 +814,58 @@ private fun BirthDateSettingRow(
             DropdownMenu(
                 expanded = dateMenuOpen,
                 onDismissRequest = { dateMenuOpen = false },
-                modifier = Modifier.height(300.dp)
+                modifier = Modifier.height(320.dp)
             ) {
-                (UserProfile.MIN_BIRTH_YEAR..currentYear).reversed().forEach { y ->
+                if (selectingMonth) {
+                    // 月份选择面板
                     DropdownMenuItem(
-                        text = { Text("$y 年") },
-                        onClick = {
-                            onYearChange(y)
-                            dateMenuOpen = false
-                        }
+                        text = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "返回",
+                                    tint = Color(0xFF8E8E93),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    "$birthYear 年 · 选择月份",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color.White.copy(alpha = 0.8f)
+                                )
+                            }
+                        },
+                        onClick = { selectingMonth = false }
                     )
-                }
-                HorizontalDivider(color = Color(0xFF2C2C2E))
-                (1..12).forEach { m ->
-                    DropdownMenuItem(
-                        text = { Text("$m 月") },
-                        onClick = {
-                            onMonthChange(m)
-                            dateMenuOpen = false
-                        }
+                    HorizontalDivider(color = Color(0xFF2C2C2E))
+                    (1..12).forEach { m ->
+                        DropdownMenuItem(
+                            text = { Text("$m 月") },
+                            onClick = {
+                                onMonthChange(m)
+                                dateMenuOpen = false
+                                selectingMonth = false
+                            }
+                        )
+                    }
+                } else {
+                    // 年份选择面板
+                    Text(
+                        text = "选择年份",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.8f),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
                     )
+                    HorizontalDivider(color = Color(0xFF2C2C2E))
+                    (UserProfile.MIN_BIRTH_YEAR..currentYear).reversed().forEach { y ->
+                        DropdownMenuItem(
+                            text = { Text("$y 年") },
+                            onClick = {
+                                onYearChange(y)
+                                selectingMonth = true
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -732,7 +884,8 @@ private fun ListItemSettingRow(
     label: String,
     value: String,
     onEdit: () -> Unit,
-    unit: String
+    unit: String,
+    extra: String? = null
 ) {
     Row(
         modifier = Modifier
@@ -751,6 +904,15 @@ private fun ListItemSettingRow(
             modifier = Modifier.width(96.dp)
         )
         Spacer(Modifier.weight(1f))
+        if (extra != null) {
+            Text(
+                text = extra,
+                style = MaterialTheme.typography.bodySmall,
+                fontSize = 12.sp,
+                color = Color(0xFF34C759)
+            )
+            Spacer(Modifier.width(10.dp))
+        }
         Text(
             text = value,
             style = MaterialTheme.typography.titleMedium,

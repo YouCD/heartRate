@@ -149,12 +149,14 @@ fun HomeScreen(
                         verticalArrangement = Arrangement.Center
                     ) {
                         BpmNumber(bpm = currentBpm, color = zoneColor)
-                        Text(
-                            text = "BPM",
-                            fontSize = 16.sp,
-                            letterSpacing = 4.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        if (currentBpm > 0) {
+                            Text(
+                                text = "BPM",
+                                fontSize = 16.sp,
+                                letterSpacing = 4.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
 
@@ -170,40 +172,10 @@ fun HomeScreen(
 
         Spacer(Modifier.height(14.dp))
 
-        // 训练时长
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            shape = RoundedCornerShape(20.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(vertical = 16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "训练时长",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = formatElapsed(elapsedMillis),
-                    fontSize = 40.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    fontFamily = FontFamily.Monospace,
-                    color = if (sessionState == SessionState.PAUSED) {
-                        MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
-                    } else {
-                        MaterialTheme.colorScheme.onSurface
-                    }
-                )
-            }
-        }
-
-        Spacer(Modifier.height(14.dp))
-
         SessionControls(
             sessionState = sessionState,
             isConnected = isConnected,
+            elapsedMillis = elapsedMillis,
             onStart = { viewModel.startSession() },
             onPause = { viewModel.pauseSession() },
             onResume = { viewModel.resumeSession() },

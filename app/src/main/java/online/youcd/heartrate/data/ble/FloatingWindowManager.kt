@@ -74,7 +74,7 @@ class FloatingWindowManager @Inject constructor(
     private var avgText: TextView? = null
     private var maxText: TextView? = null
     private var durationText: TextView? = null
-    private var zoneBarFill: View? = null
+    private var pauseButton: TextView? = null
 
     // 数据
     private var maxHr = 190
@@ -114,6 +114,23 @@ class FloatingWindowManager @Inject constructor(
         scope.launch {
             sessionManager.elapsedMillis.collectLatest { millis ->
                 durationText?.text = formatDuration(millis / 1000)
+            }
+        }
+        scope.launch {
+            sessionManager.sessionState.collectLatest { state ->
+                when (state) {
+                    SessionManager.SessionState.RUNNING -> {
+                        pauseButton?.text = "暂停训练"
+                        pauseButton?.visibility = View.VISIBLE
+                    }
+                    SessionManager.SessionState.PAUSED -> {
+                        pauseButton?.text = "继续训练"
+                        pauseButton?.visibility = View.VISIBLE
+                    }
+                    SessionManager.SessionState.IDLE -> {
+                        pauseButton?.visibility = View.GONE
+                    }
+                }
             }
         }
     }
@@ -162,9 +179,6 @@ class FloatingWindowManager @Inject constructor(
 
         avgText?.text = "$avg"
         maxText?.text = "$max"
-
-        val fillWidth = ((bpm.toFloat() / maxHr).coerceIn(0f, 1f) * dp(104)).toInt()
-        zoneBarFill?.layoutParams = LinearLayout.LayoutParams(fillWidth, dp(6))
 
         if (lastBpm > 0) {
             trendArrow?.text = when {
@@ -339,28 +353,34 @@ class FloatingWindowManager @Inject constructor(
         panelRow.addView(maxStat.first)
         panelRow.addView(durStat.first)
 
-        val track = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            background = GradientDrawable().apply {
-                cornerRadius = dp(3).toFloat()
-                setColor(0x22FFFFFF)
-            }
-            layoutParams = LinearLayout.LayoutParams(dp(104), dp(6)).apply {
-                topMargin = dp(8)
-            }
-        }
-        val fill = View(context).apply {
-            background = GradientDrawable().apply {
-                cornerRadius = dp(3).toFloat()
-                setColor(0xFFFF2D55.toInt())
-            }
-            layoutParams = LinearLayout.LayoutParams(0, dp(6))
-        }
-        zoneBarFill = fill
-        track.addView(fill)
-
         panel.addView(panelRow)
-        panel.addView(track)
+
+        // 暂停/继续按钮
+        val pauseBtn = TextView(context).apply {
+            text = "暂停训练"
+            visibility = View.GONE
+            setTextColor(Color.WHITE)
+            textSize = 12f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setPadding(0, dp(8), 0, dp(8))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(10).toFloat()
+                setColor(0xFF2C2C2E.toInt())
+            }
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(34)
+            ).apply { topMargin = dp(10) }
+            setOnClickListener {
+                when (sessionManager.sessionState.value) {
+                    SessionManager.SessionState.RUNNING -> sessionManager.pauseSession()
+                    SessionManager.SessionState.PAUSED -> sessionManager.resumeSession()
+                    SessionManager.SessionState.IDLE -> Unit
+                }
+            }
+        }
+        pauseButton = pauseBtn
+        panel.addView(pauseBtn)
 
         container.addView(mainRow)
         container.addView(panel)

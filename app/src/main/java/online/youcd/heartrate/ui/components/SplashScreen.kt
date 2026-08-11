@@ -32,7 +32,7 @@ fun SplashScreen(
     onFinish: () -> Unit
 ) {
     LaunchedEffect(Unit) {
-        delay(1500)
+        delay(1000)
         onFinish()
     }
 
@@ -41,7 +41,7 @@ fun SplashScreen(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 800, easing = LinearEasing),
+            animation = tween(durationMillis = 500, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "progress"

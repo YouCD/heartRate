@@ -87,15 +87,20 @@ fun HeartbeatECGBackground(
             pathMeasure.setPath(wavePath, false)
             val totalLength = pathMeasure.length
             if (totalLength > 0f) {
-                // 最新光束画亮线
-                val latest = beams.last()
-                val litPath = Path()
-                pathMeasure.getSegment(0f, totalLength * latest.progress, litPath, true)
-                drawPath(
-                    path = litPath,
-                    color = color.copy(alpha = 0.9f),
-                    style = Stroke(width = 2.6.dp.toPx(), cap = StrokeCap.Round)
-                )
+                // 每个光束画各自的亮线：旧的稍暗、新的更亮
+                beams.forEachIndexed { index, beam ->
+                    val isLatest = index == beams.lastIndex
+                    val litPath = Path()
+                    pathMeasure.getSegment(0f, totalLength * beam.progress, litPath, true)
+                    drawPath(
+                        path = litPath,
+                        color = color.copy(alpha = if (isLatest) 0.9f else 0.5f),
+                        style = Stroke(
+                            width = if (isLatest) 2.6.dp.toPx() else 2.0.dp.toPx(),
+                            cap = StrokeCap.Round
+                        )
+                    )
+                }
 
                 // 每个光点
                 beams.forEach { beam ->
@@ -124,27 +129,46 @@ private fun buildMultiECGPath(width: Float, baseline: Float, amp: Float): Path {
             val x0 = i * cellW
             // 平线
             moveTo(x0, baseline)
-            lineTo(x0 + cellW * 0.10f, baseline)
+            lineTo(x0 + cellW * 0.06f, baseline)
+            // 附加弯折1（P 波前的小负波）
+            cubicTo(
+                x0 + cellW * 0.08f, baseline + 0.08f * amp,
+                x0 + cellW * 0.10f, baseline + 0.08f * amp,
+                x0 + cellW * 0.12f, baseline
+            )
+            lineTo(x0 + cellW * 0.16f, baseline)
             // P 波
             cubicTo(
-                x0 + cellW * 0.14f, baseline - 0.12f * amp,
-                x0 + cellW * 0.18f, baseline - 0.12f * amp,
-                x0 + cellW * 0.22f, baseline
+                x0 + cellW * 0.20f, baseline - 0.12f * amp,
+                x0 + cellW * 0.24f, baseline - 0.12f * amp,
+                x0 + cellW * 0.28f, baseline
             )
-            lineTo(x0 + cellW * 0.28f, baseline)
+            lineTo(x0 + cellW * 0.34f, baseline)
             // Q 波
-            lineTo(x0 + cellW * 0.31f, baseline + 0.12f * amp)
+            lineTo(x0 + cellW * 0.37f, baseline + 0.12f * amp)
             // R 波（大幅上冲）
-            lineTo(x0 + cellW * 0.36f, baseline - amp)
+            lineTo(x0 + cellW * 0.42f, baseline - amp)
             // S 波
-            lineTo(x0 + cellW * 0.41f, baseline + 0.32f * amp)
-            lineTo(x0 + cellW * 0.44f, baseline)
-            lineTo(x0 + cellW * 0.54f, baseline)
+            lineTo(x0 + cellW * 0.47f, baseline + 0.32f * amp)
+            lineTo(x0 + cellW * 0.50f, baseline)
+            // 附加弯折2（QRS 后的小正波）
+            cubicTo(
+                x0 + cellW * 0.56f, baseline - 0.10f * amp,
+                x0 + cellW * 0.62f, baseline - 0.10f * amp,
+                x0 + cellW * 0.66f, baseline
+            )
+            lineTo(x0 + cellW * 0.70f, baseline)
             // T 波
             cubicTo(
-                x0 + cellW * 0.60f, baseline - 0.24f * amp,
-                x0 + cellW * 0.68f, baseline - 0.24f * amp,
-                x0 + cellW * 0.74f, baseline
+                x0 + cellW * 0.76f, baseline - 0.24f * amp,
+                x0 + cellW * 0.84f, baseline - 0.24f * amp,
+                x0 + cellW * 0.88f, baseline
+            )
+            // U 波（T 波后的小弯折）
+            cubicTo(
+                x0 + cellW * 0.92f, baseline - 0.10f * amp,
+                x0 + cellW * 0.96f, baseline - 0.10f * amp,
+                x0 + cellW * 0.98f, baseline
             )
             lineTo(x0 + cellW, baseline)
         }

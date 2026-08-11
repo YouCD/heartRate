@@ -93,9 +93,15 @@ fun HeartRateBar(
                         .align(Alignment.CenterStart)
                         .clip(RoundedCornerShape(6.dp))
                         .background(
-                            Brush.horizontalGradient(
-                                zones.map { Color(it.color) }
-                            )
+                            if (currentZone != null) {
+                                Brush.horizontalGradient(
+                                    zones.map { Color(it.color) }
+                                )
+                            } else {
+                                Brush.horizontalGradient(
+                                    zones.map { Color(0xFF3A3A3C) }
+                                )
+                            }
                         )
                 )
                 if (currentZone != null) {

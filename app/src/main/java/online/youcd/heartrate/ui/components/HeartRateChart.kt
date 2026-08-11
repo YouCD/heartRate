@@ -157,8 +157,8 @@ fun HeartRateChart(
                 val index = (samples.size - 1) * i / (xTicks - 1)
                 val timeText = when (xAxisMode) {
                     XAxisMode.TRAINING_TIME -> {
-                        val seconds = if (baseTime != null && timestamps != null) {
-                            (timestamps[index] - baseTime) / 1000
+                        val seconds = if (baseTime != null) {
+                            (timestamps!![index] - baseTime) / 1000
                         } else {
                             index * (intervalMs / 1000)
                         }

@@ -58,6 +58,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import online.youcd.heartrate.BuildConfig
 import online.youcd.heartrate.data.model.Gender
 import online.youcd.heartrate.data.model.MaxHrMode
 import online.youcd.heartrate.data.model.UserProfile
@@ -364,6 +365,21 @@ fun SettingsScreen(
                 text = "导出为 heartRate_时间戳.zip，包含训练历史与个人资料。导入将覆盖当前数据。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        Spacer(Modifier.height(14.dp))
+
+        SettingsCard(title = "关于") {
+            SettingsRow(
+                label = "版本",
+                content = {
+                    Text(
+                        text = BuildConfig.VERSION_NAME,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             )
         }
 

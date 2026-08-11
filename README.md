@@ -18,6 +18,17 @@
 - **心率悬浮窗**：在其他应用上方显示实时心率，支持系统悬浮窗权限
 - **个性化配置**：设置性别、出生年月、身高体重，自动计算最大心率或手动指定
 
+## 截图
+
+<p align="center">
+  <img src="doc/screenshot/1.png" width="30%" />
+  <img src="doc/screenshot/2.png" width="30%" />
+  <img src="doc/screenshot/3.png" width="30%" />
+</p>
+<p align="center">
+  <img src="doc/screenshot/4.png" width="30%" />
+</p>
+
 ## 技术栈
 
 - **Kotlin** + **Jetpack Compose**（Material 3）

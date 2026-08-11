@@ -1,4 +1,32 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.io.FileInputStream
+import java.util.Properties
+
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+}
+
+fun gitVersionTag(): String {
+    return try {
+        val process = ProcessBuilder("git", "describe", "--tags", "--abbrev=0")
+            .directory(rootProject.projectDir)
+            .redirectErrorStream(true)
+            .start()
+        val tag = process.inputStream.bufferedReader().readText().trim()
+        process.waitFor()
+        if (process.exitValue() != 0 || tag.isBlank() || tag.contains("致命") || tag.contains("fatal")) {
+            "1.0.0"
+        } else {
+            tag.removePrefix("v")
+        }
+    } catch (e: Exception) {
+        "1.0.0"
+    }
+}
+
+val versionTag = gitVersionTag()
 
 plugins {
     alias(libs.plugins.android.application)
@@ -21,12 +49,29 @@ android {
         applicationId = "online.youcd.heartrate"
         minSdk = 31
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = run {
+            val parts = versionTag.split(".").map { it.toIntOrNull() ?: 0 }
+            (parts.getOrElse(0) { 0 } * 10000) +
+                (parts.getOrElse(1) { 0 } * 100) +
+                parts.getOrElse(2) { 0 }
+        }.coerceAtLeast(1)
+        versionName = versionTag
+    }
+
+    signingConfigs {
+        create("release") {
+            if (keystorePropertiesFile.exists()) {
+                keyAlias = keystoreProperties["keyAlias"] as String?
+                keyPassword = keystoreProperties["keyPassword"] as String?
+                storeFile = keystoreProperties["storeFile"]?.let { file(it) }
+                storePassword = keystoreProperties["storePassword"] as String?
+            }
+        }
     }
 
     buildTypes {
         release {
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
@@ -47,6 +92,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     packaging {

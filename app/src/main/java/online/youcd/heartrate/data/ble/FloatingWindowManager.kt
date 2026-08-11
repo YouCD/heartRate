@@ -232,7 +232,7 @@ class FloatingWindowManager @Inject constructor(
             background = GradientDrawable().apply {
                 cornerRadius = 24f * density
                 setColor(0xD9121212.toInt())
-                setStroke(dp(1), 0x14FFFFFF.toInt())
+                setStroke(dp(1), 0x14FFFFFF)
             }
             elevation = dp(20).toFloat()
         }
@@ -343,7 +343,7 @@ class FloatingWindowManager @Inject constructor(
             orientation = LinearLayout.HORIZONTAL
             background = GradientDrawable().apply {
                 cornerRadius = dp(3).toFloat()
-                setColor(0x22FFFFFF.toInt())
+                setColor(0x22FFFFFF)
             }
             layoutParams = LinearLayout.LayoutParams(dp(104), dp(6)).apply {
                 topMargin = dp(8)

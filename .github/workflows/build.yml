@@ -9,8 +9,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      ANDROID_HOME: ${{ runner.home }}/android-sdk
     steps:
       - uses: actions/checkout@v4
 
@@ -19,27 +17,22 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      - name: Cache Android SDK
-        id: cache-android
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.ANDROID_HOME }}
-          key: android-sdk-${{ runner.os }}-36
-
       - name: Setup Android SDK
-        if: steps.cache-android.outputs.cache-hit != 'true'
         run: |
-          SDK_ROOT="$ANDROID_HOME"
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/android-sdk}}"
+          echo "Using SDK at: $SDK_ROOT"
           mkdir -p "$SDK_ROOT"
-          curl -sLo /tmp/cmdline-tools.zip \
-            "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
-          unzip -q /tmp/cmdline-tools.zip -d "$SDK_ROOT"
-          mkdir -p "$SDK_ROOT/cmdline-tools/latest"
-          mv "$SDK_ROOT/cmdline-tools/bin" "$SDK_ROOT/cmdline-tools/lib" \
-             "$SDK_ROOT/cmdline-tools/NOTICE.txt" "$SDK_ROOT/cmdline-tools/source.properties" \
-             "$SDK_ROOT/cmdline-tools/latest/" 2>/dev/null || true
-          echo "$SDK_ROOT/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          if [ ! -d "$SDK_ROOT/cmdline-tools/latest" ]; then
+            curl -sLo /tmp/cmdline-tools.zip \
+              "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
+            unzip -q /tmp/cmdline-tools.zip -d "$SDK_ROOT"
+            mkdir -p "$SDK_ROOT/cmdline-tools/latest"
+            mv "$SDK_ROOT/cmdline-tools/bin" "$SDK_ROOT/cmdline-tools/lib" \
+               "$SDK_ROOT/cmdline-tools/NOTICE.txt" "$SDK_ROOT/cmdline-tools/source.properties" \
+               "$SDK_ROOT/cmdline-tools/latest/" 2>/dev/null || true
+          fi
           SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          echo "$SDK_ROOT/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
           yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --install \
             "platforms;android-36" \
             "build-tools;36.0.0" 2>&1 | tail -5

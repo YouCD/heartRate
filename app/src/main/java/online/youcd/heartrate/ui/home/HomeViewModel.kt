@@ -3,8 +3,6 @@ package online.youcd.heartrate.ui.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -22,16 +20,17 @@ import online.youcd.heartrate.data.ble.FloatingWindowManager
 import online.youcd.heartrate.data.model.HeartRateZone
 import online.youcd.heartrate.data.model.UserProfile
 import online.youcd.heartrate.data.repository.HeartRateRepository
+import online.youcd.heartrate.data.session.SessionManager
+import online.youcd.heartrate.data.session.SessionManager.SessionState
 import javax.inject.Inject
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val bleManager: BleManager,
     private val floatingWindowManager: FloatingWindowManager,
+    private val sessionManager: SessionManager,
     private val repository: HeartRateRepository
 ) : ViewModel() {
-
-    enum class SessionState { IDLE, RUNNING, PAUSED }
 
     data class SessionStats(
         val current: Int = 0,
@@ -79,21 +78,11 @@ class HomeViewModel @Inject constructor(
     private val _samples = MutableStateFlow<List<Int>>(emptyList())
     val samples: StateFlow<List<Int>> = _samples.asStateFlow()
 
-    private val _sessionSamples = MutableStateFlow<List<Int>>(emptyList())
-
-    private val _sessionState = MutableStateFlow(SessionState.IDLE)
-    val sessionState: StateFlow<SessionState> = _sessionState.asStateFlow()
-
-    private val _elapsedMillis = MutableStateFlow(0L)
-    val elapsedMillis: StateFlow<Long> = _elapsedMillis.asStateFlow()
-
-    private val _zoneSeconds = MutableStateFlow(List(HeartRateZone.ZONES.size) { 0 })
-
-    private val _sessionId = MutableStateFlow(0L)
-    private var tickerJob: Job? = null
+    val sessionState: StateFlow<SessionState> = sessionManager.sessionState
+    val elapsedMillis: StateFlow<Long> = sessionManager.elapsedMillis
 
     val sessionStats: StateFlow<SessionStats> =
-        combine(_currentBpm, _sessionSamples, _zoneSeconds, profileState) { bpm, samples, zones, profile ->
+        combine(_currentBpm, sessionManager.sessionSamples, sessionManager.zoneSeconds, profileState) { bpm, samples, zones, profile ->
             if (samples.isEmpty()) SessionStats(current = bpm, zoneSeconds = zones)
             else SessionStats(
                 current = bpm,
@@ -118,14 +107,7 @@ class HomeViewModel @Inject constructor(
                     _heartRateTick.update { it + 1 }
                 }
                 _samples.update { (it + bpm).takeLast(300) }
-                if (_sessionState.value == SessionState.RUNNING) {
-                    _sessionSamples.update { it + bpm }
-                    val zoneId = HeartRateZone.from(bpm, maxHr.value).id
-                    _zoneSeconds.update { zones ->
-                        zones.toMutableList().also { z -> z[zoneId - 1] = z[zoneId - 1] + 1 }
-                    }
-                    repository.recordHeartRate(_sessionId.value, bpm)
-                }
+                sessionManager.onHeartRate(bpm, maxHr.value)
             }
         }
 
@@ -150,52 +132,24 @@ class HomeViewModel @Inject constructor(
     }
 
     fun startSession() {
-        if (_sessionState.value != SessionState.IDLE) return
-        viewModelScope.launch {
-            val deviceName = connectedDeviceName.value ?: "未知设备"
-            val hr = maxHr.value
-            val id = repository.createSession(deviceName, hr)
-            _sessionId.value = id
-            _sessionSamples.value = emptyList()
-            _zoneSeconds.value = List(HeartRateZone.ZONES.size) { 0 }
-            _elapsedMillis.value = 0L
-            _sessionState.value = SessionState.RUNNING
-            startTicker()
-        }
+        if (sessionManager.sessionState.value != SessionState.IDLE) return
+        sessionManager.startSession(
+            deviceName = connectedDeviceName.value ?: "未知设备",
+            maxHr = maxHr.value
+        )
     }
 
     fun pauseSession() {
-        if (_sessionState.value == SessionState.RUNNING) {
-            _sessionState.value = SessionState.PAUSED
-            tickerJob?.cancel()
-        }
+        sessionManager.pauseSession()
     }
 
     fun resumeSession() {
-        if (_sessionState.value == SessionState.PAUSED) {
-            _sessionState.value = SessionState.RUNNING
-            startTicker()
-        }
+        sessionManager.resumeSession()
     }
 
     fun stopSession() {
-        if (_sessionState.value == SessionState.IDLE) return
-        tickerJob?.cancel()
-        viewModelScope.launch {
-            val hr = maxHr.value
-            val weight = profileState.value.weightKg
-            repository.endSession(
-                sessionId = _sessionId.value,
-                durationMillis = _elapsedMillis.value,
-                maxHr = hr,
-                weightKg = weight,
-                samples = _sessionSamples.value
-            )
-            _sessionState.value = SessionState.IDLE
-            _sessionSamples.value = emptyList()
-            _zoneSeconds.value = List(HeartRateZone.ZONES.size) { 0 }
-            _elapsedMillis.value = 0L
-        }
+        val weight = profileState.value.weightKg
+        sessionManager.stopSession(maxHr = maxHr.value, weightKg = weight)
     }
 
     fun toggleSimulation() {
@@ -214,17 +168,5 @@ class HomeViewModel @Inject constructor(
         val minutes = samples.size / 60.0
         val kcal = avgMets * 3.5 * weightKg / 200.0 * minutes
         return if (kcal.isFinite()) kcal.toInt() else 0
-    }
-
-    private fun startTicker() {
-        tickerJob?.cancel()
-        tickerJob = viewModelScope.launch {
-            while (isActive) {
-                delay(1000)
-                if (_sessionState.value == SessionState.RUNNING) {
-                    _elapsedMillis.update { it + 1000 }
-                }
-            }
-        }
     }
 }

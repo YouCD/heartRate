@@ -22,7 +22,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
@@ -69,7 +68,6 @@ fun HistoryScreen(
     var selectedIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
     var showHidden by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
-    var showClearAllConfirm by remember { mutableStateOf(false) }
 
     val listState = rememberLazyListState()
 
@@ -93,20 +91,6 @@ fun HistoryScreen(
                     selectedIds = emptySet()
                 }) {
                     Text("取消", color = MaterialTheme.colorScheme.primary)
-                }
-            } else {
-                IconButton(onClick = {
-                    selectMode = true
-                    selectedIds = emptySet()
-                }) {
-                    Text("选择", color = MaterialTheme.colorScheme.primary)
-                }
-                IconButton(onClick = { showClearAllConfirm = true }) {
-                    Icon(
-                        Icons.Filled.DeleteSweep,
-                        contentDescription = "清空",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
                 }
             }
         }
@@ -270,26 +254,6 @@ fun HistoryScreen(
         )
     }
 
-    if (showClearAllConfirm) {
-        AlertDialog(
-            onDismissRequest = { showClearAllConfirm = false },
-            title = { Text("清空所有训练记录？") },
-            text = { Text("此操作将删除全部记录，且无法恢复。") },
-            confirmButton = {
-                TextButton(onClick = {
-                    viewModel.deleteSessions(allSessions.map { it.id })
-                    showClearAllConfirm = false
-                }) {
-                    Text("清空", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showClearAllConfirm = false }) {
-                    Text("取消")
-                }
-            }
-        )
-    }
 }
 
 @Composable

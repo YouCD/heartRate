@@ -18,6 +18,9 @@ interface HeartRateDao {
     @Query("SELECT * FROM sessions ORDER BY startTime DESC")
     fun observeSessions(): Flow<List<SessionEntity>>
 
+    @Query("SELECT * FROM sessions ORDER BY startTime ASC")
+    suspend fun getAllSessions(): List<SessionEntity>
+
     @Query("SELECT * FROM sessions WHERE id = :sessionId")
     fun observeSession(sessionId: Long): Flow<SessionEntity?>
 

@@ -108,12 +108,6 @@ fun ScanDialog(
                         style = MaterialTheme.typography.bodyMedium,
                         color = if (scanning) SuccessGreen else MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Spacer(Modifier.weight(1f))
-                    Text(
-                        text = "下拉重新扫描",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
                 }
                 Spacer(Modifier.height(8.dp))
 
@@ -151,7 +145,7 @@ fun ScanDialog(
                                     )
                                     Spacer(Modifier.height(12.dp))
                                     Text(
-                                        text = if (scanning) "搜索附近的心率带..." else "未发现设备，下拉重新扫描",
+                                        text = if (scanning) "搜索附近的心率带..." else "未发现设备",
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )

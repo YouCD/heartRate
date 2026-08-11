@@ -10,6 +10,8 @@ import android.graphics.PorterDuff
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.provider.Settings
 import android.view.Gravity
@@ -33,6 +35,7 @@ import kotlinx.coroutines.launch
 import online.youcd.heartrate.R
 import online.youcd.heartrate.data.model.HeartRateZone
 import online.youcd.heartrate.data.repository.HeartRateRepository
+import online.youcd.heartrate.data.session.SessionManager
 import java.util.ArrayDeque
 import java.util.Locale
 import javax.inject.Inject
@@ -45,7 +48,8 @@ import kotlin.math.sin
 class FloatingWindowManager @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val bleManager: BleManager,
-    private val repository: HeartRateRepository
+    private val repository: HeartRateRepository,
+    private val sessionManager: SessionManager
 ) {
     private val windowManager =
         context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
@@ -75,7 +79,6 @@ class FloatingWindowManager @Inject constructor(
     // 数据
     private var maxHr = 190
     private var lastBpm = 0
-    private var firstDataTime = 0L
     private val recentBpms = ArrayDeque<Int>()
 
     private var heartbeatAnimator: ValueAnimator? = null
@@ -108,6 +111,11 @@ class FloatingWindowManager @Inject constructor(
                 updateHeartRate(bpm)
             }
         }
+        scope.launch {
+            sessionManager.elapsedMillis.collectLatest { millis ->
+                durationText?.text = formatDuration(millis / 1000)
+            }
+        }
     }
 
     fun stop() {
@@ -130,7 +138,7 @@ class FloatingWindowManager @Inject constructor(
         connected = isConnected
         if (!isConnected) {
             stopHeartbeat()
-            heartImg?.setColorFilter(0xFF8E8E93.toInt(), PorterDuff.Mode.SRC_IN)
+            heartImg?.setColorFilter(0xFFFF2D55.toInt(), PorterDuff.Mode.SRC_IN)
             bpmText?.text = "--"
             zoneLabel?.text = "未连接"
             zoneLabel?.setTextColor(0xFF8E8E93.toInt())
@@ -141,11 +149,9 @@ class FloatingWindowManager @Inject constructor(
     private fun updateHeartRate(bpm: Int) {
         recentBpms.addLast(bpm)
         if (recentBpms.size > 60) recentBpms.removeFirst()
-        if (firstDataTime == 0L) firstDataTime = SystemClock.elapsedRealtime()
 
         val avg = recentBpms.average().toInt()
         val max = recentBpms.max()
-        val durationSec = (SystemClock.elapsedRealtime() - firstDataTime) / 1000
         val zone = HeartRateZone.from(bpm, maxHr)
         val zoneColor = zone.color.toInt()
 
@@ -156,7 +162,6 @@ class FloatingWindowManager @Inject constructor(
 
         avgText?.text = "$avg"
         maxText?.text = "$max"
-        durationText?.text = formatDuration(durationSec)
 
         val fillWidth = ((bpm.toFloat() / maxHr).coerceIn(0f, 1f) * dp(104)).toInt()
         zoneBarFill?.layoutParams = LinearLayout.LayoutParams(fillWidth, dp(6))
@@ -256,7 +261,7 @@ class FloatingWindowManager @Inject constructor(
         rippleView = ripple
         val heart = ImageView(context).apply {
             setImageResource(R.drawable.ic_stat_heart)
-            setColorFilter(0xFF8E8E93.toInt(), PorterDuff.Mode.SRC_IN)
+            setColorFilter(0xFFFF2D55.toInt(), PorterDuff.Mode.SRC_IN)
             layoutParams = FrameLayout.LayoutParams(dp(22), dp(22), Gravity.CENTER)
         }
         heartImg = heart
@@ -324,9 +329,9 @@ class FloatingWindowManager @Inject constructor(
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        val avgStat = panelStat("平均")
-        val maxStat = panelStat("最高")
-        val durStat = panelStat("时长")
+        val avgStat = panelStat("平均", 1f)
+        val maxStat = panelStat("最高", 1f)
+        val durStat = panelStat("时长", 1.4f)
         avgText = avgStat.second
         maxText = maxStat.second
         durationText = durStat.second
@@ -360,9 +365,6 @@ class FloatingWindowManager @Inject constructor(
         container.addView(mainRow)
         container.addView(panel)
 
-        // 点击展开/收起
-        mainRow.setOnClickListener { togglePanel() }
-
         val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
         } else {
@@ -390,6 +392,9 @@ class FloatingWindowManager @Inject constructor(
         val initialY = IntArray(1)
         val moved = BooleanArray(1)
         val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
+        val handler = Handler(Looper.getMainLooper())
+        var lastClickTime = 0L
+        var pendingToggle: Runnable? = null
 
         container.setOnTouchListener { v, event ->
             when (event.actionMasked) {
@@ -417,6 +422,20 @@ class FloatingWindowManager @Inject constructor(
 
                 MotionEvent.ACTION_UP -> {
                     v.animate().scaleX(1f).scaleY(1f).setDuration(120).start()
+                    if (!moved[0]) {
+                        val now = SystemClock.uptimeMillis()
+                        if (now - lastClickTime < 300) {
+                            pendingToggle?.let { handler.removeCallbacks(it) }
+                            pendingToggle = null
+                            openApp()
+                        } else {
+                            lastClickTime = now
+                            pendingToggle?.let { handler.removeCallbacks(it) }
+                            val toggle = Runnable { togglePanel() }
+                            pendingToggle = toggle
+                            handler.postDelayed(toggle, 300)
+                        }
+                    }
                     true
                 }
 
@@ -440,26 +459,53 @@ class FloatingWindowManager @Inject constructor(
         }
     }
 
-    private fun panelStat(label: String): Pair<LinearLayout, TextView> {
-        val column = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+    private fun openApp() {
+        val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+            ?: return
+        intent.addFlags(
+            Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+        )
+        runCatching { context.startActivity(intent) }
+    }
+
+    private fun panelStat(label: String, weight: Float): Pair<FrameLayout, TextView> {
+        val column = FrameLayout(context).apply {
+            layoutParams = LinearLayout.LayoutParams(0, dp(52), weight)
         }
         val value = TextView(context).apply {
             setTextColor(Color.WHITE)
             textSize = 16f
-            typeface = Typeface.DEFAULT_BOLD
+            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
             text = "--"
+            gravity = Gravity.CENTER
+            maxLines = 1
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            )
         }
         val labelText = TextView(context).apply {
             setTextColor(0xFF8E8E93.toInt())
             textSize = 10f
             text = label
+            gravity = Gravity.CENTER_HORIZONTAL
             setPadding(0, dp(1), 0, 0)
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            )
         }
-        column.addView(value)
-        column.addView(labelText)
+        val inner = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER
+            )
+        }
+        inner.addView(value)
+        inner.addView(labelText)
+        column.addView(inner)
         return column to value
     }
 

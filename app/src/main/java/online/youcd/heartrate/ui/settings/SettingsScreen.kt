@@ -1,6 +1,8 @@
 package online.youcd.heartrate.ui.settings
 
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -22,10 +24,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.SegmentedButton
@@ -57,6 +62,9 @@ import online.youcd.heartrate.data.model.Gender
 import online.youcd.heartrate.data.model.MaxHrMode
 import online.youcd.heartrate.data.model.UserProfile
 import online.youcd.heartrate.ui.theme.SuccessGreen
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -67,9 +75,44 @@ fun SettingsScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                runCatching {
+                    val bytes = viewModel.buildBackupZip()
+                    context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
+                }.onSuccess {
+                    Toast.makeText(context, "导出成功", Toast.LENGTH_SHORT).show()
+                }.onFailure {
+                    Toast.makeText(context, "导出失败：${it.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                val success = context.contentResolver.openInputStream(uri)?.use { input ->
+                    viewModel.restoreFromZip(input)
+                } ?: false
+                Toast.makeText(
+                    context,
+                    if (success) "导入成功" else "导入失败：文件格式不正确",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+    }
+
     var nickname by remember { mutableStateOf(profile.nickname) }
     var gender by remember { mutableStateOf(profile.gender) }
-    var age by remember { mutableStateOf(profile.age.toString()) }
+    var birthYear by remember { mutableStateOf(profile.birthYear) }
+    var birthMonth by remember { mutableStateOf(profile.birthMonth) }
     var height by remember { mutableStateOf(profile.heightCm.toString()) }
     var weight by remember { mutableStateOf(profile.weightKg.toString()) }
     var maxHrMode by remember { mutableStateOf(profile.maxHrMode) }
@@ -79,17 +122,18 @@ fun SettingsScreen(
     LaunchedEffect(profile) {
         nickname = profile.nickname
         gender = profile.gender
-        age = profile.age.toString()
+        birthYear = profile.birthYear
+        birthMonth = profile.birthMonth
         height = profile.heightCm.toString()
         weight = profile.weightKg.toString()
         maxHrMode = profile.maxHrMode
         manualMaxHr = profile.manualMaxHr.toString()
     }
 
-    val ageValue = age.toIntOrNull() ?: 0
+    val computedAge = UserProfile.computeAge(birthYear, birthMonth)
     val manualMaxHrValue = manualMaxHr.toIntOrNull() ?: 0
     val computedMaxHr = if (maxHrMode == MaxHrMode.AUTO) {
-        (208 - 0.7 * ageValue).toInt().coerceAtLeast(80)
+        (208 - 0.7 * computedAge).toInt().coerceAtLeast(80)
     } else {
         manualMaxHrValue
     }
@@ -162,11 +206,11 @@ fun SettingsScreen(
                 }
             )
             SettingsDivider()
-            NumberSettingRow(
-                label = "年龄",
-                value = age,
-                onValueChange = { if (it.length <= 3) age = it.filter(Char::isDigit) },
-                unit = "岁"
+            BirthDateSettingRow(
+                birthYear = birthYear,
+                birthMonth = birthMonth,
+                onYearChange = { birthYear = it },
+                onMonthChange = { birthMonth = it }
             )
             SettingsDivider()
             NumberSettingRow(
@@ -284,6 +328,45 @@ fun SettingsScreen(
             )
         }
 
+        Spacer(Modifier.height(14.dp))
+
+        SettingsCard(title = "数据备份") {
+            SettingsRow(
+                label = "导出备份",
+                content = {
+                    Button(
+                        onClick = {
+                            val fileName =
+                                "heartRate_" + SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
+                                    .format(Date()) + ".zip"
+                            exportLauncher.launch(fileName)
+                        },
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("导出")
+                    }
+                }
+            )
+            SettingsDivider()
+            SettingsRow(
+                label = "导入备份",
+                content = {
+                    Button(
+                        onClick = { importLauncher.launch(arrayOf("application/zip")) },
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("导入")
+                    }
+                }
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = "导出为 heartRate_时间戳.zip，包含训练历史与个人资料。导入将覆盖当前数据。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
         Spacer(Modifier.height(32.dp))
 
         Button(
@@ -292,7 +375,11 @@ fun SettingsScreen(
                     UserProfile(
                         nickname = nickname,
                         gender = gender,
-                        age = ageValue.coerceIn(UserProfile.MIN_AGE, UserProfile.MAX_AGE),
+                        birthYear = birthYear.coerceIn(
+                            UserProfile.MIN_BIRTH_YEAR,
+                            java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
+                        ),
+                        birthMonth = birthMonth.coerceIn(1, 12),
                         heightCm = height.toIntOrNull()
                             ?.coerceIn(UserProfile.MIN_HEIGHT, UserProfile.MAX_HEIGHT) ?: 0,
                         weightKg = weight.toIntOrNull()
@@ -380,6 +467,86 @@ private fun SettingsRow(
             modifier = Modifier.width(96.dp)
         )
         content()
+    }
+}
+
+@Composable
+private fun BirthDateSettingRow(
+    birthYear: Int,
+    birthMonth: Int,
+    onYearChange: (Int) -> Unit,
+    onMonthChange: (Int) -> Unit
+) {
+    var yearMenuOpen by remember { mutableStateOf(false) }
+    var monthMenuOpen by remember { mutableStateOf(false) }
+    val currentYear = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
+    val ageText = UserProfile.computeAge(birthYear, birthMonth)
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "出生年月",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.width(96.dp)
+        )
+        Box {
+            OutlinedButton(
+                onClick = { yearMenuOpen = true },
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text("$birthYear 年", style = MaterialTheme.typography.titleMedium)
+            }
+            DropdownMenu(
+                expanded = yearMenuOpen,
+                onDismissRequest = { yearMenuOpen = false },
+                modifier = Modifier.height(300.dp)
+            ) {
+                (UserProfile.MIN_BIRTH_YEAR..currentYear).reversed().forEach { y ->
+                    DropdownMenuItem(
+                        text = { Text("$y 年") },
+                        onClick = {
+                            onYearChange(y)
+                            yearMenuOpen = false
+                        }
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.width(8.dp))
+        Box {
+            OutlinedButton(
+                onClick = { monthMenuOpen = true },
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text("$birthMonth 月", style = MaterialTheme.typography.titleMedium)
+            }
+            DropdownMenu(
+                expanded = monthMenuOpen,
+                onDismissRequest = { monthMenuOpen = false },
+                modifier = Modifier.height(300.dp)
+            ) {
+                (1..12).forEach { m ->
+                    DropdownMenuItem(
+                        text = { Text("$m 月") },
+                        onClick = {
+                            onMonthChange(m)
+                            monthMenuOpen = false
+                        }
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.width(10.dp))
+        Text(
+            text = "约 $ageText 岁",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 

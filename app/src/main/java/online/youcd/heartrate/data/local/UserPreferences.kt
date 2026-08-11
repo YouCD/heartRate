@@ -23,7 +23,9 @@ class UserPreferences @Inject constructor(
     private object Keys {
         val NICKNAME = stringPreferencesKey("nickname")
         val GENDER = stringPreferencesKey("gender")
-        val AGE = intPreferencesKey("age")
+        val LEGACY_AGE = intPreferencesKey("age")
+        val BIRTH_YEAR = intPreferencesKey("birth_year")
+        val BIRTH_MONTH = intPreferencesKey("birth_month")
         val HEIGHT = intPreferencesKey("height_cm")
         val WEIGHT = intPreferencesKey("weight_kg")
         val MAX_HR_MODE = stringPreferencesKey("max_hr_mode")
@@ -33,11 +35,14 @@ class UserPreferences @Inject constructor(
     }
 
     val profile: Flow<UserProfile> = context.userDataStore.data.map { prefs ->
+        val nowYear = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
         UserProfile(
             nickname = prefs[Keys.NICKNAME] ?: "",
             gender = runCatching { Gender.valueOf(prefs[Keys.GENDER] ?: "") }
                 .getOrDefault(Gender.MALE),
-            age = prefs[Keys.AGE] ?: 30,
+            birthYear = prefs[Keys.BIRTH_YEAR]
+                ?: (prefs[Keys.LEGACY_AGE]?.let { nowYear - it } ?: 1996),
+            birthMonth = prefs[Keys.BIRTH_MONTH] ?: 1,
             heightCm = prefs[Keys.HEIGHT] ?: 170,
             weightKg = prefs[Keys.WEIGHT] ?: 70,
             maxHrMode = runCatching { MaxHrMode.valueOf(prefs[Keys.MAX_HR_MODE] ?: "") }
@@ -50,11 +55,13 @@ class UserPreferences @Inject constructor(
         context.userDataStore.edit { prefs ->
             prefs[Keys.NICKNAME] = profile.nickname
             prefs[Keys.GENDER] = profile.gender.name
-            prefs[Keys.AGE] = profile.age
+            prefs[Keys.BIRTH_YEAR] = profile.birthYear
+            prefs[Keys.BIRTH_MONTH] = profile.birthMonth
             prefs[Keys.HEIGHT] = profile.heightCm
             prefs[Keys.WEIGHT] = profile.weightKg
             prefs[Keys.MAX_HR_MODE] = profile.maxHrMode.name
             prefs[Keys.MANUAL_MAX_HR] = profile.manualMaxHr
+            prefs.remove(Keys.LEGACY_AGE)
         }
     }
 

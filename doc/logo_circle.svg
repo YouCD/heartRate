@@ -5,7 +5,7 @@
       <stop offset="0%" stop-color="#FF6B6B"/>
       <stop offset="100%" stop-color="#EE0979"/>
     </linearGradient>
-    
+
     <!-- 阴影滤镜：增加立体感 -->
     <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
       <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000000" flood-opacity="0.2"/>
@@ -13,18 +13,18 @@
   </defs>
 
   <!-- App图标背景 -->
-  <rect width="512" height="512" rx="115" fill="url(#bgGradient)"/>
+  <circle cx="256" cy="256" r="256" fill="url(#bgGradient)"/>
 
   <!-- 装饰性背景心形 (低透明度) -->
-  <path d="M256 380 C256 380 120 290 120 190 C120 130 170 90 220 90 C245 90 256 110 256 110 C256 110 267 90 292 90 C342 90 392 130 392 190 C392 290 256 380 256 380 Z" 
+  <path d="M256 380 C256 380 120 290 120 190 C120 130 170 90 220 90 C245 90 256 110 256 110 C256 110 267 90 292 90 C342 90 392 130 392 190 C392 290 256 380 256 380 Z"
         fill="white" opacity="0.15"/>
 
   <!-- 主心电图线条 (P-QRS-T波群模拟) -->
-  <polyline points="60,256 130,256 160,220 190,290 230,140 270,360 310,230 340,256 452,256" 
-            stroke="white" 
-            stroke-width="24" 
-            stroke-linecap="round" 
-            stroke-linejoin="round" 
+  <polyline points="60,256 130,256 160,220 190,290 230,140 270,360 310,230 340,256 452,256"
+            stroke="white"
+            stroke-width="24"
+            stroke-linecap="round"
+            stroke-linejoin="round"
             filter="url(#shadow)"/>
 
   <!-- 底部数据记录指示器 (象征运动数据统计) -->

@@ -110,6 +110,20 @@ class HeartRateRepository @Inject constructor(
     fun observeHeartRates(sessionId: Long): Flow<List<HeartRateEntity>> =
         dao.observeHeartRates(sessionId)
 
+    suspend fun getAllSessions(): List<SessionEntity> = dao.getAllSessions()
+
+    suspend fun importBackup(
+        profile: UserProfile?,
+        sessions: List<SessionEntity>,
+        heartRates: List<HeartRateEntity>
+    ) {
+        dao.deleteAllHeartRates()
+        dao.deleteAllSessions()
+        sessions.forEach { dao.insertSession(it) }
+        dao.insertHeartRates(heartRates)
+        if (profile != null) userPreferences.saveProfile(profile)
+    }
+
     suspend fun clearAll() {
         dao.deleteAllHeartRates()
         dao.deleteAllSessions()

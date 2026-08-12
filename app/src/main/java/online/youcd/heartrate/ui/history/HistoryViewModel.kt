@@ -97,17 +97,28 @@ class HistoryViewModel @Inject constructor(
     }
 
     private fun dateLabel(millis: Long): String {
-        val today = Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
-        }.timeInMillis
-        val startOfDay = (millis / 86_400_000L) * 86_400_000L
-        val todayStart = (today / 86_400_000L) * 86_400_000L
+        val cal = Calendar.getInstance().apply { time = Date(millis) }
+        cal.set(Calendar.HOUR_OF_DAY, 0)
+        cal.set(Calendar.MINUTE, 0)
+        cal.set(Calendar.SECOND, 0)
+        cal.set(Calendar.MILLISECOND, 0)
+        val startOfDay = cal.timeInMillis
+
+        val todayCal = Calendar.getInstance()
+        todayCal.set(Calendar.HOUR_OF_DAY, 0)
+        todayCal.set(Calendar.MINUTE, 0)
+        todayCal.set(Calendar.SECOND, 0)
+        todayCal.set(Calendar.MILLISECOND, 0)
+        val todayStart = todayCal.timeInMillis
+
+        val yesterdayCal = Calendar.getInstance().apply { time = Date(todayStart) }
+        yesterdayCal.add(Calendar.DAY_OF_YEAR, -1)
+        val yesterdayStart = yesterdayCal.timeInMillis
+
         return when (startOfDay) {
             todayStart -> "今天"
-            todayStart - 86_400_000L -> "昨天"
+            yesterdayStart -> "昨天"
             else -> {
-                val cal = Calendar.getInstance().apply { time = Date(millis) }
                 val year = cal.get(Calendar.YEAR)
                 val currentYear = Calendar.getInstance().get(Calendar.YEAR)
                 val month = cal.get(Calendar.MONTH) + 1

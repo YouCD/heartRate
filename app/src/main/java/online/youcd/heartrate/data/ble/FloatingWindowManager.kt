@@ -31,6 +31,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import online.youcd.heartrate.R
 import online.youcd.heartrate.data.model.HeartRateZone
@@ -112,8 +113,14 @@ class FloatingWindowManager @Inject constructor(
             }
         }
         scope.launch {
-            sessionManager.elapsedMillis.collectLatest { millis ->
-                durationText?.text = formatDuration(millis / 1000)
+            combine(
+                sessionManager.elapsedMillis,
+                sessionManager.sessionState
+            ) { millis, state ->
+                if (state == SessionManager.SessionState.IDLE) "--:--"
+                else formatDuration(millis / 1000)
+            }.collectLatest { text ->
+                durationText?.text = text
             }
         }
         scope.launch {
@@ -160,7 +167,19 @@ class FloatingWindowManager @Inject constructor(
             zoneLabel?.text = "未连接"
             zoneLabel?.setTextColor(0xFF8E8E93.toInt())
             trendArrow?.text = ""
+            centerBpmOverZone()
+        } else {
+            bpmText?.setPadding(0, 0, 0, 0)
         }
+    }
+
+    private fun centerBpmOverZone() {
+        val bpm = bpmText ?: return
+        val zone = zoneLabel ?: return
+        val zoneWidth = zone.paint.measureText(zone.text.toString())
+        val bpmWidth = bpm.paint.measureText(bpm.text.toString())
+        val leftPad = (zone.paddingLeft + (zoneWidth - bpmWidth) / 2f).coerceAtLeast(0f).toInt()
+        bpm.setPadding(leftPad, bpm.paddingTop, bpm.paddingRight, bpm.paddingBottom)
     }
 
     private fun updateHeartRate(bpm: Int) {
@@ -177,16 +196,12 @@ class FloatingWindowManager @Inject constructor(
         zoneLabel?.text = zoneLabelText(zone.id)
         zoneLabel?.setTextColor(zoneColor)
 
+        val zoneMax = (maxHr * zone.maxPercent).toInt().coerceAtMost(maxHr)
+        trendArrow?.text = zoneMax.toString()
+
         avgText?.text = "$avg"
         maxText?.text = "$max"
 
-        if (lastBpm > 0) {
-            trendArrow?.text = when {
-                bpm - lastBpm > 3 -> "↑"
-                bpm - lastBpm < -3 -> "↓"
-                else -> "→"
-            }
-        }
         if (bpm != lastBpm) {
             popBpmText()
             beatOnce(bpm)
@@ -255,7 +270,7 @@ class FloatingWindowManager @Inject constructor(
         // 主行
         val mainRow = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
+            gravity = Gravity.CENTER
             setPadding(dp(14), dp(12), dp(14), dp(12))
         }
 
@@ -288,7 +303,7 @@ class FloatingWindowManager @Inject constructor(
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(10), 0, 0, 0)
             layoutParams = LinearLayout.LayoutParams(
-                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
             )
         }
         val valueRow = LinearLayout(context).apply {
@@ -302,12 +317,6 @@ class FloatingWindowManager @Inject constructor(
             typeface = Typeface.DEFAULT_BOLD
         }
         bpmText = bpm
-        val unit = TextView(context).apply {
-            text = "BPM"
-            setTextColor(0xFF8E8E93.toInt())
-            textSize = 11f
-            setPadding(dp(5), 0, 0, dp(3))
-        }
         val trend = TextView(context).apply {
             setTextColor(0xFF8E8E93.toInt())
             textSize = 14f
@@ -315,7 +324,6 @@ class FloatingWindowManager @Inject constructor(
         }
         trendArrow = trend
         valueRow.addView(bpm)
-        valueRow.addView(unit)
         valueRow.addView(trend)
 
         val zone = TextView(context).apply {
@@ -348,7 +356,7 @@ class FloatingWindowManager @Inject constructor(
         val durStat = panelStat("时长", 1.4f)
         avgText = avgStat.second
         maxText = maxStat.second
-        durationText = durStat.second
+        durationText = durStat.second.apply { text = "--:--" }
         panelRow.addView(avgStat.first)
         panelRow.addView(maxStat.first)
         panelRow.addView(durStat.first)
@@ -393,7 +401,7 @@ class FloatingWindowManager @Inject constructor(
         }
 
         val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
+            dp(156),
             WindowManager.LayoutParams.WRAP_CONTENT,
             type,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
@@ -530,11 +538,11 @@ class FloatingWindowManager @Inject constructor(
     }
 
     private fun zoneLabelText(id: Int): String = when (id) {
-        1 -> "恢复区 Z1"
-        2 -> "热身区 Z2"
-        3 -> "燃脂区 Z3"
-        4 -> "有氧区 Z4"
-        else -> "极限区 Z5"
+        1 -> "恢复"
+        2 -> "热身"
+        3 -> "燃脂"
+        4 -> "有氧"
+        else -> "极限"
     }
 
     private fun formatDuration(totalSeconds: Long): String {

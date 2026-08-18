@@ -91,7 +91,8 @@ class SessionManager @Inject constructor(
                 durationMillis = _elapsedMillis.value,
                 maxHr = maxHr,
                 weightKg = weightKg,
-                samples = _sessionSamples.value
+                samples = _sessionSamples.value,
+                zoneSeconds = _zoneSeconds.value
             )
             _sessionState.value = SessionState.IDLE
             _sessionSamples.value = emptyList()

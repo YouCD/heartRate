@@ -7,12 +7,14 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -77,12 +79,7 @@ fun HomeScreen(
     val zoneColor = zone?.let { Color(it.color) } ?: MaterialTheme.colorScheme.onSurface
     val isConnected = connectionState is BleManager.ConnectionState.Connected
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp)
-    ) {
+    val deviceCard: @Composable () -> Unit = {
         DeviceCard(
             connectionState = connectionState,
             deviceName = connectedDeviceName,
@@ -103,18 +100,21 @@ fun HomeScreen(
                 }
             }
         )
+    }
 
-        Spacer(Modifier.height(14.dp))
-
+    val currentHrCard: @Composable (Modifier) -> Unit = { modifier ->
         // 当前心率
         Surface(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = modifier.fillMaxWidth(),
             color = MaterialTheme.colorScheme.surfaceVariant,
             shape = RoundedCornerShape(20.dp)
         ) {
             Column(
-                modifier = Modifier.padding(vertical = 20.dp, horizontal = 16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(vertical = 20.dp, horizontal = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.SpaceEvenly
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
@@ -135,7 +135,8 @@ fun HomeScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(180.dp),
+                        .weight(1f)
+                        .heightIn(min = 160.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     HeartbeatECGBackground(
@@ -169,9 +170,9 @@ fun HomeScreen(
                 )
             }
         }
+    }
 
-        Spacer(Modifier.height(14.dp))
-
+    val sessionControls: @Composable () -> Unit = {
         SessionControls(
             sessionState = sessionState,
             isConnected = isConnected,
@@ -181,20 +182,21 @@ fun HomeScreen(
             onResume = { viewModel.resumeSession() },
             onStopRequest = { showStopSheet = true }
         )
+    }
 
-        Spacer(Modifier.height(14.dp))
-
+    val zoneListCard: @Composable (Modifier) -> Unit = { modifier ->
         // 心率区间列表
         ZoneListCard(
+            modifier = modifier,
             maxHr = maxHr,
             zoneSeconds = stats.zoneSeconds,
             activeZoneId = zone?.id,
             isConnected = isConnected,
             zoneLabel = ::zoneLabel
         )
+    }
 
-        Spacer(Modifier.height(14.dp))
-
+    val statsRow: @Composable () -> Unit = {
         // 卡路里 / 平均 / 最大
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -217,8 +219,61 @@ fun HomeScreen(
                 modifier = Modifier.weight(1f)
             )
         }
+    }
 
-        Spacer(Modifier.height(24.dp))
+    BoxWithConstraints(
+        modifier = Modifier.fillMaxSize()
+    ) {
+        val isLandscape = maxWidth > maxHeight
+        if (isLandscape) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    currentHrCard(Modifier.weight(1f).heightIn(min = 280.dp))
+                    zoneListCard(Modifier.weight(1f).heightIn(min = 280.dp))
+                }
+                Spacer(Modifier.height(14.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        deviceCard()
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        statsRow()
+                        Spacer(Modifier.height(14.dp))
+                        sessionControls()
+                        Spacer(Modifier.height(24.dp))
+                    }
+                }
+            }
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp)
+            ) {
+                deviceCard()
+                Spacer(Modifier.height(14.dp))
+                currentHrCard(Modifier)
+                Spacer(Modifier.height(14.dp))
+                sessionControls()
+                Spacer(Modifier.height(14.dp))
+                zoneListCard(Modifier)
+                Spacer(Modifier.height(14.dp))
+                statsRow()
+                Spacer(Modifier.height(24.dp))
+            }
+        }
     }
 
     if (showScan) {

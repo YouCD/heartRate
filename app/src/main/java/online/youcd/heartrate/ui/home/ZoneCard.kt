@@ -8,12 +8,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -57,6 +59,7 @@ private val ZoneDisabledText = Color(0xFF48484A)
 
 @Composable
 internal fun ZoneListCard(
+    modifier: Modifier = Modifier,
     maxHr: Int,
     zoneSeconds: List<Int>,
     activeZoneId: Int?,
@@ -67,11 +70,16 @@ internal fun ZoneListCard(
     var longPressedZone by remember { mutableStateOf<HeartRateZone?>(null) }
 
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         color = ZoneCardBg,
         shape = RoundedCornerShape(16.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.SpaceEvenly
+        ) {
             // 标题行：图标 + 标题 + 状态标签
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(

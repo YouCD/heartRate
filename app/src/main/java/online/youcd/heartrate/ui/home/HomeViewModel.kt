@@ -82,14 +82,20 @@ class HomeViewModel @Inject constructor(
     val elapsedMillis: StateFlow<Long> = sessionManager.elapsedMillis
 
     val sessionStats: StateFlow<SessionStats> =
-        combine(_currentBpm, sessionManager.sessionSamples, sessionManager.zoneSeconds, profileState) { bpm, samples, zones, profile ->
+        combine(
+            _currentBpm,
+            sessionManager.sessionSamples,
+            sessionManager.zoneSeconds,
+            profileState,
+            sessionManager.elapsedMillis
+        ) { bpm, samples, zones, profile, elapsed ->
             if (samples.isEmpty()) SessionStats(current = bpm, zoneSeconds = zones)
             else SessionStats(
                 current = bpm,
                 min = samples.minOrNull() ?: 0,
                 avg = samples.average().toInt(),
                 max = samples.maxOrNull() ?: 0,
-                calories = estimateCalories(samples, maxHr.value, profile.weightKg),
+                calories = estimateCalories(samples, maxHr.value, profile.weightKg, elapsed),
                 zoneSeconds = zones
             )
         }.stateIn(viewModelScope, SharingStarted.Eagerly, SessionStats())
@@ -160,12 +166,12 @@ class HomeViewModel @Inject constructor(
         bleManager.disconnect()
     }
 
-    private fun estimateCalories(samples: List<Int>, maxHr: Int, weightKg: Int): Int {
+    private fun estimateCalories(samples: List<Int>, maxHr: Int, weightKg: Int, durationMillis: Long): Int {
         if (samples.isEmpty() || maxHr <= 0 || weightKg <= 0) return 0
         val avgMets = samples.map {
             METS_BY_ZONE[HeartRateZone.from(it, maxHr).id] ?: 4.0
         }.average()
-        val minutes = samples.size / 60.0
+        val minutes = durationMillis / 60000.0
         val kcal = avgMets * 3.5 * weightKg / 200.0 * minutes
         return if (kcal.isFinite()) kcal.toInt() else 0
     }

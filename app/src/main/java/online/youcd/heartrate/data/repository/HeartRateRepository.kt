@@ -52,13 +52,14 @@ class HeartRateRepository @Inject constructor(
         durationMillis: Long,
         maxHr: Int,
         weightKg: Int,
-        samples: List<Int>
+        samples: List<Int>,
+        zoneSeconds: List<Int>
     ) {
         val avgBpm = if (samples.isEmpty()) 0 else samples.average().toInt()
         val maxBpm = samples.maxOrNull() ?: 0
         val minBpm = samples.minOrNull() ?: 0
-        val calories = estimateCalories(samples, maxHr, weightKg)
-        val zoneSeconds = buildZoneSeconds(samples, maxHr)
+        val calories = estimateCalories(samples, maxHr, weightKg, durationMillis)
+        val zoneSecondsStr = buildZoneSeconds(zoneSeconds)
 
         val base = dao.getSession(sessionId)
         if (base != null) {
@@ -70,7 +71,7 @@ class HeartRateRepository @Inject constructor(
                     maxBpm = maxBpm,
                     minBpm = minBpm,
                     calories = calories,
-                    zoneSeconds = zoneSeconds
+                    zoneSeconds = zoneSecondsStr
                 )
             )
         }
@@ -84,23 +85,20 @@ class HeartRateRepository @Inject constructor(
         5 to 9.5
     )
 
-    private fun estimateCalories(samples: List<Int>, maxHr: Int, weightKg: Int): Int {
+    private fun estimateCalories(samples: List<Int>, maxHr: Int, weightKg: Int, durationMillis: Long): Int {
         if (samples.isEmpty() || maxHr <= 0 || weightKg <= 0) return 0
         val avgMets = samples.map {
             METS_BY_ZONE[HeartRateZone.from(it, maxHr).id] ?: 4.0
         }.average()
-        val minutes = samples.size / 60.0
+        val minutes = durationMillis / 60000.0
         val kcal = avgMets * 3.5 * weightKg / 200.0 * minutes
         return if (kcal.isFinite()) kcal.toInt() else 0
     }
 
-    private fun buildZoneSeconds(samples: List<Int>, maxHr: Int): String {
-        val map = HeartRateZone.ZONES.associate { it.displayName to 0 }.toMutableMap()
-        for (bpm in samples) {
-            val name = HeartRateZone.from(bpm, maxHr).displayName
-            map[name] = (map[name] ?: 0) + 1
-        }
-        return map.map { (k, v) -> "$k:$v" }.joinToString(",")
+    private fun buildZoneSeconds(zones: List<Int>): String {
+        return HeartRateZone.ZONES.mapIndexed { index, zone ->
+            "${zone.displayName}:${zones.getOrElse(index) { 0 }}"
+        }.joinToString(",")
     }
 
     fun observeSessions(): Flow<List<SessionEntity>> = dao.observeSessions()

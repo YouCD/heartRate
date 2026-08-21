@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -102,7 +103,7 @@ fun HomeScreen(
         )
     }
 
-    val currentHrCard: @Composable (Modifier) -> Unit = { modifier ->
+    val currentHrCard: @Composable (Modifier, Boolean) -> Unit = { modifier, ecgFlexible ->
         // 当前心率
         Surface(
             modifier = modifier.fillMaxWidth(),
@@ -111,10 +112,10 @@ fun HomeScreen(
         ) {
             Column(
                 modifier = Modifier
-                    .fillMaxSize()
+                    .then(if (ecgFlexible) Modifier.fillMaxSize() else Modifier)
                     .padding(vertical = 20.dp, horizontal = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.SpaceEvenly
+                verticalArrangement = if (ecgFlexible) Arrangement.SpaceEvenly else Arrangement.Top
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
@@ -135,8 +136,13 @@ fun HomeScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f)
-                        .heightIn(min = 160.dp),
+                        .then(
+                            if (ecgFlexible) {
+                                Modifier.weight(1f).heightIn(min = 160.dp)
+                            } else {
+                                Modifier.height(180.dp)
+                            }
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
                     HeartbeatECGBackground(
@@ -144,6 +150,22 @@ fun HomeScreen(
                         tick = heartRateTick,
                         color = zoneColor,
                         modifier = Modifier.fillMaxSize()
+                    )
+                val currentZone = HeartRateZone.from(currentBpm, maxHr)
+                val zoneMinBpm = (maxHr * currentZone.minPercent).toInt()
+                val zoneMaxBpm = (maxHr * currentZone.maxPercent).toInt().coerceAtMost(maxHr)
+                val zoneMinText = if (zoneMinBpm <= 0) "≤$zoneMaxBpm" else "$zoneMinBpm"
+                val zoneMaxText = if (currentZone.maxPercent >= 1f) ">$zoneMinBpm" else "$zoneMaxBpm"
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = zoneMinText,
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                        textAlign = TextAlign.Start
                     )
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -159,6 +181,14 @@ fun HomeScreen(
                             )
                         }
                     }
+                    Text(
+                        text = zoneMaxText,
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                        textAlign = TextAlign.End
+                    )
+                }
                 }
 
                 Spacer(Modifier.height(12.dp))
@@ -236,7 +266,7 @@ fun HomeScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    currentHrCard(Modifier.weight(1f).heightIn(min = 280.dp))
+                    currentHrCard(Modifier.weight(1f).heightIn(min = 280.dp), true)
                     zoneListCard(Modifier.weight(1f).heightIn(min = 280.dp))
                 }
                 Spacer(Modifier.height(14.dp))
@@ -264,7 +294,7 @@ fun HomeScreen(
             ) {
                 deviceCard()
                 Spacer(Modifier.height(14.dp))
-                currentHrCard(Modifier)
+                currentHrCard(Modifier, false)
                 Spacer(Modifier.height(14.dp))
                 sessionControls()
                 Spacer(Modifier.height(14.dp))
